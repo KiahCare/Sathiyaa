@@ -111,7 +111,7 @@ If you lose the secret, delete the key and make another — that costs nothing.
 SSH to the EC2 instance and edit the server's own `.env`:
 
 ```bash
-ssh -i your-key.pem ec2-user@13.127.37.28
+ssh -i your-key.pem ec2-user@<your-ec2-public-ip>
 nano /opt/sathiyaa/backend/.env
 ```
 

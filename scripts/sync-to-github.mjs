@@ -145,8 +145,13 @@ const RULES = [
 ];
 
 // Files written by hand at the repository root, which no source rule may
-// clobber and which `removed` must not offer to delete.
-const AUTHORED = ['README.md', '.gitignore'];
+// clobber and which the sync must not delete.
+//
+// Leaving `.gitattributes` off this list cost one round: the sync saw a file
+// in the repository that no rule claimed, decided it was no longer part of the
+// project, and deleted it. Anything added to the repository by hand belongs
+// here or it will not survive the next sync.
+const AUTHORED = ['README.md', '.gitignore', '.gitattributes', 'LICENSE'];
 
 // --------------------------------------------------------------- the walker
 function walk(absDir, rel, skip, out) {
