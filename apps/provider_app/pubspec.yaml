@@ -1,0 +1,35 @@
+name: sathiyaa_provider
+description: Sathiyaa Wellness — Service Provider app (accept requests, deliver service, manage organization).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  intl: ^0.20.3
+  http: ^1.6.0
+  http_parser: ^4.1.2
+  shared_preferences: ^2.5.5
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
+  geolocator: ^14.0.3
+  image_picker: ^1.2.3
+  url_launcher: ^6.3.2
+  device_info_plus: ^13.2.0
+  package_info_plus: ^10.2.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png

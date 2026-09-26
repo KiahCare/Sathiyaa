@@ -1,0 +1,416 @@
+erDiagram
+    %% =================================================================
+    %% Sathiyaa — 39 tables, migrations 001–011.
+    %% Regenerated 2026-09-19 from backend/src/db/migrations/*.sql.
+    %%
+    %% 008 added USER_DEVICES: the device registry behind the console's
+    %%     Devices page. One row per account per handset, not one column
+    %%     per account, because the question worth answering afterwards is
+    %%     "which devices has this account been on" and a single column
+    %%     cannot answer it.
+    %% 009 added BOOKINGS.for_family_member_id, so a booking can be for
+    %%     somebody other than the person who made it — the adult child
+    %%     arranging care for a parent, which is the commonest case here.
+    %%     NULL means "for the account holder", which keeps every earlier
+    %%     row correct without a backfill.
+    %% 010 added SOS_ALERTS.
+    %% 011 added BOOKING_MESSAGES.
+    %% =================================================================
+
+    %% --- CUSTOMER ----------------------------------------------------
+    CUSTOMERS ||--o{ CUSTOMER_ADDRESSES : has
+    CUSTOMERS ||--o{ CUSTOMER_VITALS : records
+    CUSTOMERS ||--o{ CUSTOMER_MEDICATIONS : takes
+    CUSTOMERS ||--o{ CUSTOMER_SURGERIES : "history of"
+    CUSTOMERS ||--o{ CUSTOMER_ALLERGIES : "history of"
+    CUSTOMERS ||--o{ CUSTOMER_INSURANCE : "covered by"
+    CUSTOMERS ||--o{ CUSTOMER_FAMILY_MEMBERS : "emergency contacts"
+    CUSTOMERS ||--o{ CUSTOMER_PROVIDER_LINKS : "favourites (max 10)"
+    CUSTOMERS ||--o{ BOOKINGS : places
+    CUSTOMERS ||--o{ RATINGS : gives
+    CUSTOMERS ||--o{ CUSTOMER_RATINGS : "is rated in"
+    CUSTOMERS ||--o{ SOS_ALERTS : raises
+    CUSTOMER_FAMILY_MEMBERS ||--o{ BOOKINGS : "is visited on"
+
+    %% --- PROVIDER ----------------------------------------------------
+    SERVICE_PROVIDERS ||--o{ SERVICE_PROVIDERS : "employs (org_employee)"
+    SERVICE_PROVIDERS ||--o{ SERVICE_PROVIDER_ADDRESSES : "home/office"
+    SERVICE_PROVIDERS ||--o{ SERVICE_PROVIDER_WORK_HOURS : "available on"
+    SERVICE_PROVIDERS ||--o{ SERVICE_PROVIDER_EXPERTISE : "qualified for"
+    SERVICE_PROVIDERS ||--o{ SERVICE_PROVIDER_CALENDAR_BLOCKS : "unavailable on"
+    SERVICE_PROVIDERS ||--o{ PROVIDER_LOCATION_LOG : "pings"
+    SERVICE_PROVIDERS ||--o{ ORGANIZATION_SERVICE_FEES : "org rate card"
+    SERVICE_PROVIDERS ||--o{ CUSTOMER_PROVIDER_LINKS : "favourited by"
+    SERVICE_PROVIDERS ||--o{ BOOKING_REQUESTS : receives
+    SERVICE_PROVIDERS ||--o{ RATINGS : receives
+    SERVICE_PROVIDERS ||--o{ CUSTOMER_RATINGS : gives
+    SERVICE_PROVIDERS ||--o{ TIME_BANK_LEDGER : earns
+
+    %% --- BOOKING -----------------------------------------------------
+    BOOKINGS ||--o{ BOOKING_REQUESTS : "fans out to"
+    BOOKINGS ||--o| SERVICE_PROVIDERS : "confirmed_provider_id"
+    BOOKINGS ||--o| SERVICE_PROVIDERS : "assigned_employee_id"
+    BOOKINGS ||--o| CUSTOMER_ADDRESSES : "served at"
+    BOOKINGS ||--o{ BOOKING_TRANSFERS : "handed over via"
+    BOOKINGS ||--o{ BOOKING_SERVICE_SESSIONS : "worked as"
+    BOOKINGS ||--o{ BOOKING_CANCELLATIONS : "cancelled by"
+    BOOKINGS ||--o{ BOOKING_PAYMENTS : "paid via"
+    BOOKINGS ||--o| RATINGS : "rated in"
+    BOOKINGS ||--o| CUSTOMER_RATINGS : "rated in"
+    BOOKINGS ||--o{ MASKED_CALL_SESSIONS : "bridged by"
+    BOOKINGS ||--o{ TIME_BANK_LEDGER : "credits"
+
+    BOOKINGS ||--o{ BOOKING_MESSAGES : carries
+    BOOKINGS ||--o{ SOS_ALERTS : "raised during"
+
+    %% --- BUSINESS PARTNER --------------------------------------------
+    BUSINESS_AGENTS ||--o{ BUSINESS_AGENT_REFERRALS : makes
+    BUSINESS_AGENT_REFERRALS }o--o| CUSTOMERS : "becomes (once registered)"
+
+    %% --- ADMIN / PLATFORM --------------------------------------------
+    ADMIN_USERS ||--o{ BROADCAST_MESSAGES : sends
+
+    %% --- ENTITIES ----------------------------------------------------
+    CUSTOMERS {
+        int      customer_id PK
+        varchar  display_id UK "CUST-000001"
+        varchar  name
+        varchar  mobile_number UK
+        date     dob
+        enum     gender "male|female|other"
+        enum     blood_group
+        json     preferred_languages
+        set      preferred_comm_mode "email|call|sms (multi — migration 006)"
+        decimal  bmi "GENERATED from height_cm/weight_kg"
+        varchar  referred_by_code "soft link to business_agents.referral_code"
+        enum     status "pending_payment|active|blocked"
+        varchar  device_id "binds account to one handset"
+        datetime terms_privacy_accepted_at
+        decimal  rating_avg "how providers rated this customer"
+    }
+    CUSTOMER_ADDRESSES {
+        int     id PK
+        int     customer_id FK
+        enum    address_type "primary|secondary"
+        decimal latitude
+        decimal longitude
+    }
+    CUSTOMER_VITALS {
+        bigint   id PK
+        int      customer_id FK
+        enum     vital_type "bp|spo2|pulse|glucose"
+        decimal  value_primary "systolic for BP"
+        decimal  value_secondary "diastolic for BP only"
+        datetime deleted_at "soft delete"
+    }
+    CUSTOMER_MEDICATIONS {
+        bigint   id PK
+        int      customer_id FK
+        varchar  medicine_name
+        varchar  prescription_url
+        datetime deleted_at "soft delete"
+    }
+    CUSTOMER_SURGERIES {
+        bigint   id PK
+        int      customer_id FK
+        date     surgery_date
+        datetime deleted_at "soft delete"
+    }
+    CUSTOMER_ALLERGIES {
+        bigint   id PK
+        int      customer_id FK
+        enum     status "active|inactive"
+        datetime deleted_at "soft delete"
+    }
+    CUSTOMER_INSURANCE {
+        bigint  id PK
+        int     customer_id FK
+        varchar policy_number
+        date    end_date
+    }
+    CUSTOMER_FAMILY_MEMBERS {
+        bigint   id PK
+        int      customer_id FK
+        varchar  relationship
+        datetime deleted_at "soft delete"
+    }
+    CUSTOMER_PROVIDER_LINKS {
+        int int_id PK
+        int customer_id FK
+        int provider_id FK
+    }
+
+    SERVICE_PROVIDERS {
+        int     provider_id PK
+        varchar display_id UK "SP-000001"
+        enum    provider_kind "freelancer|organization|org_employee"
+        int     organization_id FK "self-reference when org_employee"
+        varchar mobile_number UK
+        varchar pin_hash "6-digit login PIN"
+        decimal hourly_rate
+        boolean no_fees "volunteer — hours go to the Time Bank"
+        varchar aadhar_doc_url
+        varchar police_verification_url "with valid_from/valid_to"
+        varchar medical_certificate_url "with valid_from/valid_to"
+        varchar work_certificate_url
+        boolean allocate_via_org "org allocates the employee, not search"
+        enum    approval_status "pending|approved|hold|rejected"
+        enum    status "active|blocked"
+        varchar device_id "binds account to one handset"
+        boolean location_on
+        decimal current_latitude
+        decimal current_longitude
+        decimal rating_avg
+    }
+    SERVICE_PROVIDER_ADDRESSES {
+        int     id PK
+        int     provider_id FK
+        enum    address_type "home|office"
+        decimal latitude
+        decimal longitude
+    }
+    SERVICE_PROVIDER_WORK_HOURS {
+        int  id PK
+        int  provider_id FK
+        enum day_of_week "sun..sat — one row per day"
+        time start_time
+        time end_time
+    }
+    SERVICE_PROVIDER_EXPERTISE {
+        int     id PK
+        int     provider_id FK
+        enum    service_type "companion|medical_companion|nurse|physiotherapy"
+        decimal years_experience
+    }
+    SERVICE_PROVIDER_CALENDAR_BLOCKS {
+        bigint   id PK
+        int      provider_id FK
+        datetime block_start
+        datetime block_end
+    }
+    PROVIDER_LOCATION_LOG {
+        bigint   id PK
+        int      provider_id FK
+        decimal  latitude
+        decimal  longitude
+        datetime recorded_at
+    }
+    ORGANIZATION_SERVICE_FEES {
+        int     id PK
+        int     organization_id FK
+        enum    service_type
+        decimal fee_per_hour "overrides the employee's own rate"
+    }
+
+    BOOKINGS {
+        bigint   booking_id PK
+        varchar  display_id UK
+        int      customer_id FK
+        enum     service_type
+        int      address_id FK
+        date     start_date
+        date     end_date
+        time     time_from
+        time     time_to
+        enum     gender_preference "male|female|other|any"
+        enum     status "searching|pending_payment|confirmed|in_progress|completed|cancelled|expired"
+        int      confirmed_provider_id FK "the one who accepted"
+        int      assigned_employee_id FK "org allocation"
+        datetime payment_deadline_at "lapses 15 min after acceptance"
+        decimal  amount_due
+        decimal  amount_received
+        enum     payment_status "pending|partial|paid"
+    }
+    BOOKING_REQUESTS {
+        bigint   id PK
+        bigint   booking_id FK
+        int      provider_id FK
+        enum     status "pending|accepted|rejected|invalidated|expired"
+        datetime sent_at
+        datetime responded_at
+    }
+    BOOKING_TRANSFERS {
+        bigint id PK
+        bigint booking_id FK
+        int    from_provider_id FK
+        int    to_provider_id FK
+        enum   status "pending|accepted|rejected"
+    }
+    BOOKING_SERVICE_SESSIONS {
+        bigint   id PK
+        bigint   booking_id FK
+        int      provider_id FK
+        date     session_date "one row per day worked"
+        varchar  otp_code "customer reads it out to start the visit"
+        boolean  facial_recognition_verified "stub — integration point"
+        datetime start_time_actual
+        datetime end_time_actual
+        decimal  total_hours
+        decimal  amount "provider payout"
+        decimal  customer_amount "what the customer owes"
+        boolean  is_no_fees "donated — credited to the Time Bank"
+    }
+    BOOKING_CANCELLATIONS {
+        bigint  id PK
+        bigint  booking_id FK
+        enum    cancelled_by_type "customer|provider|admin"
+        decimal hours_before_start
+        decimal cancellation_fee_amount
+        decimal refund_amount
+    }
+    BOOKING_PAYMENTS {
+        bigint  id PK
+        bigint  booking_id FK
+        decimal amount
+        enum    payment_type "full|part"
+        int     recorded_by "provider_id — no FK"
+    }
+    RATINGS {
+        bigint  id PK
+        bigint  booking_id FK,UK "one per booking"
+        int     customer_id FK
+        int     provider_id FK
+        tinyint rating "1-5"
+    }
+    CUSTOMER_RATINGS {
+        bigint  id PK
+        bigint  booking_id FK,UK "one per booking"
+        int     provider_id FK "the one giving feedback"
+        int     customer_id FK "the one being rated"
+        tinyint rating "1-5"
+    }
+    MASKED_CALL_SESSIONS {
+        bigint   id PK
+        bigint   booking_id FK
+        varchar  virtual_number
+        datetime expires_at
+    }
+
+    BUSINESS_AGENTS {
+        int     business_partner_id PK
+        varchar display_id UK "BP-000001"
+        varchar entity_name
+        varchar referral_code UK "APOL1001"
+        varchar password_hash
+        enum    status "active|blocked"
+    }
+    BUSINESS_AGENT_REFERRALS {
+        bigint id PK
+        int    business_partner_id FK
+        int    customer_id FK "null until the referral registers"
+        enum   service_type
+        enum   status "pending|booked|completed|cancelled"
+    }
+
+    ADMIN_USERS {
+        int     admin_id PK
+        varchar email UK
+        varchar password_hash
+        enum    role "super_admin|ops_admin|support"
+        enum    status "active|blocked"
+    }
+    BROADCAST_MESSAGES {
+        bigint id PK
+        int    sent_by FK
+        enum   target_audience "customers|providers|both"
+        int    recipient_count "migration 007"
+        int    delivered_count "migration 007"
+    }
+
+    %% --- STANDALONE: no foreign keys, by design ----------------------
+    TRANSACTIONS {
+        bigint  transaction_id PK
+        enum    transaction_type "registration|booking_charge|cancellation_fee|renewal"
+        enum    reference_type "customer|provider|booking — polymorphic, no FK"
+        bigint  reference_id
+        decimal amount
+        varchar gateway "stub"
+        enum    status "created|pending|success|failed|refunded"
+    }
+    AUDIT_LOG {
+        bigint    id PK
+        enum      user_type "customer|provider|business_agent|admin|system — polymorphic, no FK"
+        int       user_id
+        varchar   device_id
+        varchar   location_id "lat,lng at time of action"
+        varchar   form_name
+        varchar   action
+        json      metadata
+    }
+    OTP_LOG {
+        bigint   id PK
+        enum     user_type "polymorphic, no FK"
+        int      user_id
+        enum     purpose "login|reset"
+        datetime expires_at
+    }
+    APP_CONFIGURATION {
+        int     id PK
+        varchar config_key UK "booking amount, annual fees"
+        varchar config_value
+    }
+    REVENUE_SHARING_CONFIG {
+        int     id PK
+        enum    service_type
+        decimal customer_rate_per_hour "what the customer pays"
+        decimal provider_rate_per_hour "what the provider earns"
+        decimal business_partner_flat_per_hour "partner's cut"
+        date    effective_from
+    }
+    TIME_BANK_CONFIG {
+        int     id PK
+        enum    service_type
+        decimal points_per_hour
+        year    application_year
+    }
+    TIME_BANK_LEDGER {
+        bigint  id PK
+        int     provider_id FK
+        bigint  booking_id FK
+        decimal hours
+        decimal points_earned
+    }
+
+    %% --- ADDED 008-011 -----------------------------------------------
+    %% USER_DEVICES has no foreign key on purpose: user_id points at one of
+    %% four tables depending on user_type, so the constraint cannot be
+    %% expressed. The joins live in adminController's DEVICE_SELECT.
+    USER_DEVICES {
+        bigint  id PK
+        enum    user_type "customer|provider|business_agent|admin"
+        int     user_id
+        varchar device_id
+        varchar platform "android|ios|web"
+        varchar manufacturer
+        varchar model
+        varchar os_version
+        varchar app_version
+        boolean is_physical "false on an emulator"
+        datetime first_seen_at
+        datetime last_seen_at
+        varchar last_ip "45 chars: IPv6"
+        boolean is_current "the bound device"
+    }
+    SOS_ALERTS {
+        bigint  id PK
+        int     customer_id FK
+        decimal latitude
+        decimal longitude
+        varchar address_text
+        bigint  booking_id FK "if a visit was running"
+        varchar note
+        enum    delivery "sent|partial|failed|simulated"
+        int     notified_count
+        json    recipients "who, and what happened to each"
+        datetime acknowledged_at
+        int     acknowledged_by "admin_users.admin_id"
+        varchar resolution
+    }
+    BOOKING_MESSAGES {
+        bigint  id PK
+        bigint  booking_id FK
+        enum    sender_type "customer|provider|system"
+        int     sender_id "null for system"
+        varchar body
+        datetime read_at "null = unread"
+    }

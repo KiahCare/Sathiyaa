@@ -1,0 +1,37 @@
+# Without this, the line endings in a checkout depend on whoever cloned it.
+# The project is written on Windows, so most files here are CRLF on disk; Git
+# stores LF and converts on checkout, which keeps diffs readable and stops a
+# reviewer on macOS seeing every file as entirely rewritten.
+* text=auto eol=lf
+
+# Windows-only scripts, which cmd.exe and some PowerShell hosts want CRLF.
+*.ps1   text eol=crlf
+*.cmd   text eol=crlf
+*.bat   text eol=crlf
+
+# Shell scripts must stay LF or bash on the server fails with "\r: command
+# not found" -- which has already happened once to the deploy, in a way that
+# looked like the script had silently done nothing.
+*.sh    text eol=lf
+
+# Binary: never touch, never diff as text.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.ico   binary
+*.pdf   binary
+*.docx  binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+*.apk   binary
+*.mp4   binary
+
+# Generated and large; collapse in pull requests rather than filling them.
+package-lock.json  linguist-generated=true
+pubspec.lock       linguist-generated=true
+
+# So GitHub's language bar reflects what was written, not what was vendored.
+docs/erd.html        linguist-documentation=true
+apps/*/web/*         linguist-vendored=true

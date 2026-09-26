@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Allows the app to talk to a server over plain HTTP.
+
+  Android blocks cleartext HTTP by default for anything targeting SDK 28 or
+  later, which is everything now. Without this, the app cannot reach the
+  Sathiyaa backend while it is running on a computer on your own Wi-Fi at
+  http://192.168.x.x:4000 - "Test connection" fails and nothing loads. Debug
+  builds happened to be more forgiving, which is why this only surfaced when
+  the release APK was built.
+
+  It is deliberately broad rather than a list of addresses, because the
+  computer's LAN IP changes whenever the router hands out a new one, and
+  Android's network-security config matches host names, not address ranges.
+
+  REMOVE THIS once the API is on HTTPS - the moment the backend has a real
+  certificate (Azure, Cloudflare, anything), delete this file and the
+  android:networkSecurityConfig line in AndroidManifest.xml. Leaving it in a
+  published app would let any network in the middle read and alter traffic.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

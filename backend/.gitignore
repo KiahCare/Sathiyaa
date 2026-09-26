@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.log
+
+# Files uploaded at runtime (photos, prescriptions, provider documents)
+uploads/

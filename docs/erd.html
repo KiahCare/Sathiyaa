@@ -1,0 +1,896 @@
+<title>Sathiyaa Schema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --paper:    #FBFAF6;
+    --surface:  #FFFFFF;
+    --sunk:     #F3F2EC;
+    --ink:      #16211D;
+    --muted:    #66756F;
+    --line:     #E0E6E1;
+    --line-firm:#C6D0CA;
+    --accent:   #0E6E5B;
+    --accent-bg:#E4F0EC;
+    --money:    #A8601F;
+    --money-bg: #F6EBDF;
+    --stub:     #8C4F63;
+    --stub-bg:  #F5E9ED;
+
+    --serif: "Newsreader", Georgia, "Times New Roman", serif;
+    --sans:  "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:    #0F1614;
+      --surface:  #18211E;
+      --sunk:     #131C19;
+      --ink:      #E6EDE9;
+      --muted:    #94A29C;
+      --line:     #2A3632;
+      --line-firm:#3C4B45;
+      --accent:   #57C3A6;
+      --accent-bg:#14302A;
+      --money:    #D9954E;
+      --money-bg: #33251480;
+      --stub:     #C98CA2;
+      --stub-bg:  #2F1F26;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:    #0F1614;
+    --surface:  #18211E;
+    --sunk:     #131C19;
+    --ink:      #E6EDE9;
+    --muted:    #94A29C;
+    --line:     #2A3632;
+    --line-firm:#3C4B45;
+    --accent:   #57C3A6;
+    --accent-bg:#14302A;
+    --money:    #D9954E;
+    --money-bg: #33251480;
+    --stub:     #C98CA2;
+    --stub-bg:  #2F1F26;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    padding-inline: 20px;
+    padding-block: 0;
+  }
+
+  .wrap { max-width: 1060px; margin: 0 auto; }
+
+  /* ---------- masthead ---------- */
+  header.top {
+    padding-block: 52px 30px;
+    border-bottom: 1px solid var(--line-firm);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(34px, 6vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -.015em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-family: var(--serif);
+    font-size: clamp(17px, 2.4vw, 20px);
+    line-height: 1.5;
+    color: var(--muted);
+    max-width: 60ch;
+    margin: 0;
+  }
+
+  /* ---------- facts strip ---------- */
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border-bottom: 1px solid var(--line-firm);
+    margin-bottom: 44px;
+  }
+  .fact {
+    flex: 1 1 130px;
+    padding: 18px 20px 18px 0;
+    border-right: 1px solid var(--line);
+  }
+  .fact:last-child { border-right: 0; }
+  .fact b {
+    display: block;
+    font-family: var(--serif);
+    font-size: 30px;
+    font-weight: 500;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .fact span {
+    display: block;
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ---------- sections ---------- */
+  section { margin-bottom: 56px; scroll-margin-top: 20px; }
+  h2 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(24px, 3.4vw, 31px);
+    letter-spacing: -.01em;
+    margin: 0 0 6px;
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: .1em;
+    display: block;
+    margin-bottom: 8px;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: .01em;
+    margin: 32px 0 10px;
+  }
+  .lede { color: var(--muted); max-width: 66ch; margin: 0 0 26px; }
+  p { max-width: 68ch; }
+  a { color: var(--accent); text-underline-offset: 3px; }
+
+  code, .m {
+    font-family: var(--mono);
+    font-size: .87em;
+    background: var(--sunk);
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+
+  /* ---------- figures ---------- */
+  figure {
+    margin: 0 0 26px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 22px 20px 16px;
+    overflow-x: auto;
+  }
+  figure svg {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    min-width: 560px;
+    color: var(--ink);
+  }
+  figcaption {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 16px;
+    padding-top: 13px;
+    border-top: 1px solid var(--line);
+    max-width: 74ch;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* svg primitives */
+  .bx   { fill: var(--sunk); stroke: var(--line-firm); stroke-width: 1; }
+  .bx-a { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 1.5; }
+  .bx-m { fill: var(--money-bg); stroke: var(--money); stroke-width: 1.5; }
+  .bx-s { fill: var(--stub-bg); stroke: var(--stub); stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .ln   { stroke: var(--line-firm); stroke-width: 1.4; fill: none; }
+  .ln-a { stroke: var(--accent); stroke-width: 1.8; fill: none; }
+  .ln-m { stroke: var(--money); stroke-width: 1.8; fill: none; }
+  .ln-d { stroke: var(--muted); stroke-width: 1.3; fill: none; stroke-dasharray: 5 4; }
+  .t    { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+  .t-b  { font-family: var(--sans); font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+  .t-s  { font-family: var(--sans); font-size: 11px; fill: var(--muted); }
+  .t-a  { font-family: var(--sans); font-size: 11px; fill: var(--accent); font-weight: 500; }
+  .t-m  { font-family: var(--sans); font-size: 11px; fill: var(--money); font-weight: 500; }
+
+  /* ---------- reference tables ---------- */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 660px; font-size: 13.5px; }
+  th {
+    text-align: left;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line-firm);
+    white-space: nowrap;
+  }
+  td { padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td.name { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: var(--ink); }
+  td.key  { font-family: var(--mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  td.what { color: var(--muted); min-width: 260px; }
+
+  /* ---------- callouts ---------- */
+  .note {
+    border-left: 2px solid var(--accent);
+    padding: 2px 0 2px 18px;
+    margin: 24px 0;
+    color: var(--muted);
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note.warn { border-left-color: var(--stub); }
+
+  ul.clean { padding-left: 20px; color: var(--muted); max-width: 68ch; }
+  ul.clean li { margin-bottom: 8px; }
+  ul.clean li b { color: var(--ink); font-weight: 600; }
+
+  .pill {
+    display: inline-block;
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    background: var(--accent-bg);
+    color: var(--accent);
+    vertical-align: 1px;
+  }
+  .pill.stub { background: var(--stub-bg); color: var(--stub); }
+
+  footer {
+    border-top: 1px solid var(--line-firm);
+    padding-block: 26px 60px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  @media (max-width: 640px) {
+    .fact { flex-basis: 45%; border-right: 0; padding-right: 0; }
+    figure { padding: 14px 12px 12px; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">Sathiyaa · MySQL 8 · migrations 001–011</p>
+  <h1>The database, end to end</h1>
+  <p class="standfirst">Thirty-six tables covering the customer, the provider,
+  the booking that joins them, and the money that comes out of it — drawn as it
+  actually stands in the running server on 16 September 2026.</p>
+</header>
+
+<div class="facts">
+  <div class="fact"><b>39</b><span>tables</span></div>
+  <div class="fact"><b>44</b><span>foreign keys</span></div>
+  <div class="fact"><b>11</b><span>migrations</span></div>
+  <div class="fact"><b>130</b><span>route handlers</span></div>
+  <div class="fact"><b>4</b><span>service types</span></div>
+</div>
+
+<!-- ================================================================= -->
+<section id="core">
+  <h2><span class="num">01 — the mechanism</span>One booking, many offers, first acceptance wins</h2>
+  <p class="lede">This is the part of the design that everything else hangs off,
+  and the part a column list can't show you. A customer doesn't pick a provider.
+  They describe a need; the server works out who qualifies and offers the job to
+  all of them at once.</p>
+
+  <figure>
+    <svg viewBox="0 0 880 340" role="img" aria-label="A customer places one booking; the server fans it out as separate booking_requests rows to every qualifying provider; the first provider to accept is written back to the booking as confirmed_provider_id and the remaining requests are marked invalidated.">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="7" orient="auto">
+          <polygon points="0,0 10,4 0,8" fill="currentColor"/>
+        </marker>
+        <marker id="a2" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="7" orient="auto">
+          <polygon points="0,0 10,4 0,8" fill="var(--accent)"/>
+        </marker>
+      </defs>
+
+      <!-- customer -->
+      <rect class="bx" x="8"  y="140" width="126" height="56" rx="3"/>
+      <text class="t"   x="71" y="163" text-anchor="middle">customers</text>
+      <text class="t-s" x="71" y="180" text-anchor="middle">CUST-000001</text>
+
+      <line class="ln" x1="134" y1="168" x2="204" y2="168" marker-end="url(#a1)"/>
+      <text class="t-s" x="169" y="160" text-anchor="middle">places</text>
+
+      <!-- booking -->
+      <rect class="bx-a" x="206" y="130" width="146" height="76" rx="3"/>
+      <text class="t"   x="279" y="156" text-anchor="middle">bookings</text>
+      <text class="t-s" x="279" y="173" text-anchor="middle">nurse · Tue</text>
+      <text class="t-s" x="279" y="189" text-anchor="middle">09:00–13:00</text>
+
+      <!-- fan out -->
+      <path class="ln" d="M352 155 C 410 155, 410 60, 466 60" marker-end="url(#a1)"/>
+      <path class="ln-a" d="M352 168 L 466 168" marker-end="url(#a2)"/>
+      <path class="ln" d="M352 181 C 410 181, 410 276, 466 276" marker-end="url(#a1)"/>
+      <text class="t-s" x="409" y="118" text-anchor="middle">matched on</text>
+      <text class="t-s" x="409" y="132" text-anchor="middle">skill · day · hours · distance</text>
+
+      <!-- request rows -->
+      <rect class="bx" x="468" y="36" width="182" height="48" rx="3"/>
+      <text class="t"   x="559" y="57" text-anchor="middle">booking_requests</text>
+      <text class="t-s" x="559" y="73" text-anchor="middle">invalidated</text>
+
+      <rect class="bx-a" x="468" y="144" width="182" height="48" rx="3"/>
+      <text class="t"   x="559" y="165" text-anchor="middle">booking_requests</text>
+      <text class="t-a" x="559" y="181" text-anchor="middle">accepted</text>
+
+      <rect class="bx" x="468" y="252" width="182" height="48" rx="3"/>
+      <text class="t"   x="559" y="273" text-anchor="middle">booking_requests</text>
+      <text class="t-s" x="559" y="289" text-anchor="middle">invalidated</text>
+
+      <!-- providers -->
+      <line class="ln"   x1="650" y1="60"  x2="708" y2="60"  marker-end="url(#a1)"/>
+      <line class="ln-a" x1="650" y1="168" x2="708" y2="168" marker-end="url(#a2)"/>
+      <line class="ln"   x1="650" y1="276" x2="708" y2="276" marker-end="url(#a1)"/>
+
+      <rect class="bx"   x="710" y="36"  width="162" height="48" rx="3"/>
+      <text class="t"    x="791" y="65"  text-anchor="middle">service_providers</text>
+      <rect class="bx-a" x="710" y="144" width="162" height="48" rx="3"/>
+      <text class="t"    x="791" y="167" text-anchor="middle">service_providers</text>
+      <text class="t-a"  x="791" y="183" text-anchor="middle">Anjali — accepted first</text>
+      <rect class="bx"   x="710" y="252" width="162" height="48" rx="3"/>
+      <text class="t"    x="791" y="281" text-anchor="middle">service_providers</text>
+
+      <!-- write-back -->
+      <path class="ln-a" d="M468 192 C 430 215, 330 215, 290 208" marker-end="url(#a2)"/>
+      <text class="t-a" x="379" y="232" text-anchor="middle">sets confirmed_provider_id</text>
+    </svg>
+    <figcaption><b>The fan-out.</b> <span class="m">bookings</span> holds the
+    request; one <span class="m">booking_requests</span> row is written per
+    qualifying provider, unique on <span class="m">(booking_id, provider_id)</span>.
+    The first <span class="m">accepted</span> row wins — the server writes that
+    provider onto the booking and flips every other row to
+    <span class="m">invalidated</span>, so a second acceptance cannot land.
+    This is also why a provider sees only the customer's first name and area
+    until they have the job: one request reaches many strangers.</figcaption>
+  </figure>
+</section>
+
+<!-- ================================================================= -->
+<section id="lifecycle">
+  <h2><span class="num">02 — state</span>What a booking moves through</h2>
+  <p class="lede">Seven states on <span class="m">bookings.status</span>. Each
+  arrow is an action by a named party, and each one writes an
+  <span class="m">audit_log</span> row.</p>
+
+  <figure>
+    <svg viewBox="0 0 880 290" role="img" aria-label="Booking status flows left to right from searching, to pending payment when a provider accepts, to confirmed when the customer confirms, to in progress when the start OTP is verified, to completed when the service ends. Searching times out to expired; pending payment lapses to expired after fifteen minutes; confirmed can be cancelled.">
+      <defs>
+        <marker id="a3" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="7" orient="auto">
+          <polygon points="0,0 10,4 0,8" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <rect class="bx" x="4"   y="56" width="146" height="50" rx="3"/>
+      <text class="t" x="77"  y="86" text-anchor="middle">searching</text>
+
+      <rect class="bx" x="182" y="56" width="146" height="50" rx="3"/>
+      <text class="t" x="255" y="80" text-anchor="middle">pending_</text>
+      <text class="t" x="255" y="95" text-anchor="middle">payment</text>
+
+      <rect class="bx" x="360" y="56" width="146" height="50" rx="3"/>
+      <text class="t" x="433" y="86" text-anchor="middle">confirmed</text>
+
+      <rect class="bx" x="538" y="56" width="146" height="50" rx="3"/>
+      <text class="t" x="611" y="86" text-anchor="middle">in_progress</text>
+
+      <rect class="bx-a" x="716" y="56" width="146" height="50" rx="3"/>
+      <text class="t" x="789" y="86" text-anchor="middle">completed</text>
+
+      <line class="ln" x1="150" y1="81" x2="176" y2="81" marker-end="url(#a3)"/>
+      <line class="ln" x1="328" y1="81" x2="354" y2="81" marker-end="url(#a3)"/>
+      <line class="ln" x1="506" y1="81" x2="532" y2="81" marker-end="url(#a3)"/>
+      <line class="ln" x1="684" y1="81" x2="710" y2="81" marker-end="url(#a3)"/>
+
+      <text class="t-s" x="163" y="38" text-anchor="middle">provider</text>
+      <text class="t-s" x="163" y="51" text-anchor="middle">accepts</text>
+      <text class="t-s" x="341" y="38" text-anchor="middle">customer</text>
+      <text class="t-s" x="341" y="51" text-anchor="middle">confirms</text>
+      <text class="t-s" x="519" y="38" text-anchor="middle">start OTP</text>
+      <text class="t-s" x="519" y="51" text-anchor="middle">verified</text>
+      <text class="t-s" x="697" y="38" text-anchor="middle">service</text>
+      <text class="t-s" x="697" y="51" text-anchor="middle">ended</text>
+
+      <!-- expiry / cancel row -->
+      <rect class="bx" x="120" y="200" width="146" height="46" rx="3"/>
+      <text class="t" x="193" y="228" text-anchor="middle">expired</text>
+      <rect class="bx" x="400" y="200" width="146" height="46" rx="3"/>
+      <text class="t" x="473" y="228" text-anchor="middle">cancelled</text>
+
+      <path class="ln-d" d="M77 106 L 77 223 L 114 223" marker-end="url(#a3)"/>
+      <text class="t-s" x="60" y="168" text-anchor="end">nobody</text>
+      <text class="t-s" x="60" y="181" text-anchor="end">accepts</text>
+
+      <path class="ln-d" d="M255 106 L 255 223 L 272 223" marker-end="url(#a3)"/>
+      <text class="t-s" x="268" y="140" text-anchor="start">15 min lapse</text>
+
+      <path class="ln-d" d="M433 106 L 433 223 L 394 223" marker-end="url(#a3)"/>
+      <text class="t-s" x="448" y="140" text-anchor="start">either party cancels</text>
+
+      <path class="ln-d" d="M611 106 C 611 160, 560 200, 549 218" marker-end="url(#a3)"/>
+
+      <text class="t-s" x="473" y="268" text-anchor="middle">writes booking_cancellations — fee and refund by hours_before_start</text>
+    </svg>
+    <figcaption><b>The lifecycle.</b> The only path to
+    <span class="m">in_progress</span> runs through an OTP the customer reads out
+    loud to the provider standing in front of them, recorded on
+    <span class="m">booking_service_sessions.otp_verified_at</span>. A booking
+    that reaches <span class="m">cancelled</span> always writes a
+    <span class="m">booking_cancellations</span> row carrying
+    <span class="m">hours_before_start</span>, which is what the fee and refund
+    are calculated from.</figcaption>
+  </figure>
+</section>
+
+<!-- ================================================================= -->
+<section id="customer">
+  <h2><span class="num">03 — customer</span>Nine tables</h2>
+  <p class="lede">One account row and eight satellites. Everything hangs off
+  <span class="m">customer_id</span> with <span class="m">ON DELETE CASCADE</span>,
+  so removing a customer removes their whole medical record with them — which is
+  why the admin console refuses to delete anyone who has ever taken a booking.</p>
+
+  <figure>
+    <svg viewBox="0 0 880 430" role="img" aria-label="The customers table at left with eight child tables to the right: addresses, vitals, medications, surgeries, allergies, insurance, family members, and provider links, all joined by customer_id with cascade delete.">
+      <defs>
+        <marker id="a4" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+          <polygon points="0,0 10,4 0,8" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <rect class="bx-a" x="6" y="168" width="196" height="94" rx="3"/>
+      <text class="t"   x="104" y="196" text-anchor="middle">customers</text>
+      <text class="t-s" x="104" y="215" text-anchor="middle">customer_id PK</text>
+      <text class="t-s" x="104" y="231" text-anchor="middle">mobile_number UK</text>
+      <text class="t-s" x="104" y="247" text-anchor="middle">device_id · status</text>
+
+      <text class="t-a" x="104" y="286" text-anchor="middle">ON DELETE CASCADE</text>
+      <text class="t-s" x="104" y="302" text-anchor="middle">on all eight</text>
+
+      <path class="ln" d="M202 215 C 250 215, 250 30,  296 30"  marker-end="url(#a4)"/>
+      <path class="ln" d="M202 215 C 250 215, 250 78,  296 78"  marker-end="url(#a4)"/>
+      <path class="ln" d="M202 215 C 250 215, 250 126, 296 126" marker-end="url(#a4)"/>
+      <path class="ln" d="M202 215 C 250 215, 250 174, 296 174" marker-end="url(#a4)"/>
+      <path class="ln" d="M202 215 C 250 215, 250 222, 296 222" marker-end="url(#a4)"/>
+      <path class="ln" d="M202 215 C 250 215, 250 270, 296 270" marker-end="url(#a4)"/>
+      <path class="ln" d="M202 215 C 250 215, 250 318, 296 318" marker-end="url(#a4)"/>
+      <path class="ln" d="M202 215 C 250 215, 250 366, 296 366" marker-end="url(#a4)"/>
+
+      <rect class="bx" x="298" y="10"  width="330" height="40" rx="3"/>
+      <text class="t" x="312" y="35">customer_addresses</text>
+      <text class="t-s" x="616" y="35" text-anchor="end">primary · secondary</text>
+
+      <rect class="bx" x="298" y="58"  width="330" height="40" rx="3"/>
+      <text class="t" x="312" y="83">customer_vitals</text>
+      <text class="t-s" x="616" y="83" text-anchor="end">bp · spo2 · pulse · glucose</text>
+
+      <rect class="bx" x="298" y="106" width="330" height="40" rx="3"/>
+      <text class="t" x="312" y="131">customer_medications</text>
+      <text class="t-s" x="616" y="131" text-anchor="end">+ prescription image</text>
+
+      <rect class="bx" x="298" y="154" width="330" height="40" rx="3"/>
+      <text class="t" x="312" y="179">customer_surgeries</text>
+
+      <rect class="bx" x="298" y="202" width="330" height="40" rx="3"/>
+      <text class="t" x="312" y="227">customer_allergies</text>
+      <text class="t-s" x="616" y="227" text-anchor="end">active · inactive</text>
+
+      <rect class="bx" x="298" y="250" width="330" height="40" rx="3"/>
+      <text class="t" x="312" y="275">customer_insurance</text>
+      <text class="t-s" x="616" y="275" text-anchor="end">policy + validity</text>
+
+      <rect class="bx" x="298" y="298" width="330" height="40" rx="3"/>
+      <text class="t" x="312" y="323">customer_family_members</text>
+      <text class="t-s" x="616" y="323" text-anchor="end">emergency contacts</text>
+
+      <rect class="bx" x="298" y="346" width="330" height="40" rx="3"/>
+      <text class="t" x="312" y="371">customer_provider_links</text>
+      <text class="t-s" x="616" y="371" text-anchor="end">favourites</text>
+
+      <!-- soft-delete bracket -->
+      <path class="ln-d" d="M640 78 L 660 78 L 660 338 L 640 338"/>
+      <text class="t-s" x="672" y="200">five of these</text>
+      <text class="t-s" x="672" y="215">soft-delete:</text>
+      <text class="t-s" x="672" y="230">a removed record</text>
+      <text class="t-s" x="672" y="245">keeps its row and</text>
+      <text class="t-s" x="672" y="260">sets deleted_at</text>
+    </svg>
+    <figcaption><b>A medical record, not a contact card.</b> Vitals, medications,
+    surgeries, allergies and family members are never hard-deleted — the row stays
+    and <span class="m">deleted_at</span> is stamped, so a nurse arriving next
+    month can still see that an allergy was recorded and withdrawn.
+    <span class="m">customer_provider_links</span> is the favourites list; the cap
+    of ten lives in the app, not in the database.</figcaption>
+  </figure>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Table</th><th>Key</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr><td class="name">customers</td><td class="key">customer_id</td><td class="what">The account. <span class="m">display_id</span> <span class="m">CUST-000001</span>, unique mobile, <span class="m">device_id</span> binding the account to one handset, a generated <span class="m">bmi</span> column, and <span class="m">preferred_comm_mode</span> as a <span class="m">SET</span> so all three channels can be ticked at once.</td></tr>
+      <tr><td class="name">customer_addresses</td><td class="key">→ customer_id</td><td class="what">One primary and one secondary, enforced by a unique key. Carries lat/lng — this is what the provider search measures distance from.</td></tr>
+      <tr><td class="name">customer_vitals</td><td class="key">→ customer_id</td><td class="what">BP, SpO2, pulse, glucose. BP uses both value columns; the rest use only the first.</td></tr>
+      <tr><td class="name">customer_medications</td><td class="key">→ customer_id</td><td class="what">Name, frequency, and an optional prescription image.</td></tr>
+      <tr><td class="name">customer_surgeries</td><td class="key">→ customer_id</td><td class="what">Procedure and date.</td></tr>
+      <tr><td class="name">customer_allergies</td><td class="key">→ customer_id</td><td class="what">Allergy, onset date, and whether it is still active.</td></tr>
+      <tr><td class="name">customer_insurance</td><td class="key">→ customer_id</td><td class="what">Insurer, policy number, cover period.</td></tr>
+      <tr><td class="name">customer_family_members</td><td class="key">→ customer_id</td><td class="what">Name, relationship, contact number — who to call.</td></tr>
+      <tr><td class="name">customer_provider_links</td><td class="key">→ customer_id, provider_id</td><td class="what">Preferred caretakers. Unique per pair; capped at ten in the app layer.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<section id="provider">
+  <h2><span class="num">04 — provider</span>Seven tables, and one table that references itself</h2>
+  <p class="lede">A freelancer, an organization, and an organization's employee are
+  all rows in <span class="m">service_providers</span>. An employee points at its
+  organization through <span class="m">organization_id</span> — a foreign key from
+  the table to itself.</p>
+
+  <figure>
+    <svg viewBox="0 0 880 400" role="img" aria-label="The service_providers table references itself through organization_id so that an organization employs employee rows. Six child tables hang off it: addresses, work hours, expertise, calendar blocks, location log, and organization service fees.">
+      <defs>
+        <marker id="a5" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+          <polygon points="0,0 10,4 0,8" fill="currentColor"/>
+        </marker>
+        <marker id="a6" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+          <polygon points="0,0 10,4 0,8" fill="var(--accent)"/>
+        </marker>
+      </defs>
+
+      <!-- self reference loop -->
+      <path class="ln-a" d="M60 178 C 60 118, 40 96, 104 96 C 168 96, 148 118, 148 178" marker-end="url(#a6)"/>
+      <text class="t-a" x="104" y="72" text-anchor="middle">organization_id — employs</text>
+      <text class="t-s" x="104" y="88" text-anchor="middle">freelancer · organization · org_employee</text>
+
+      <rect class="bx-a" x="6" y="180" width="200" height="110" rx="3"/>
+      <text class="t"   x="106" y="206" text-anchor="middle">service_providers</text>
+      <text class="t-s" x="106" y="225" text-anchor="middle">provider_id PK</text>
+      <text class="t-s" x="106" y="241" text-anchor="middle">approval_status</text>
+      <text class="t-s" x="106" y="257" text-anchor="middle">status · device_id</text>
+      <text class="t-s" x="106" y="273" text-anchor="middle">current_lat / current_lng</text>
+
+      <text class="t-s" x="106" y="314" text-anchor="middle">approval_status gates search;</text>
+      <text class="t-s" x="106" y="329" text-anchor="middle">status gates sign-in.</text>
+      <text class="t-s" x="106" y="344" text-anchor="middle">They are separate on purpose.</text>
+
+      <path class="ln" d="M206 228 C 256 228, 256 36,  306 36"  marker-end="url(#a5)"/>
+      <path class="ln" d="M206 228 C 256 228, 256 96,  306 96"  marker-end="url(#a5)"/>
+      <path class="ln" d="M206 228 C 256 228, 256 156, 306 156" marker-end="url(#a5)"/>
+      <path class="ln" d="M206 228 C 256 228, 256 216, 306 216" marker-end="url(#a5)"/>
+      <path class="ln" d="M206 228 C 256 228, 256 276, 306 276" marker-end="url(#a5)"/>
+      <path class="ln" d="M206 228 C 256 228, 256 336, 306 336" marker-end="url(#a5)"/>
+
+      <rect class="bx" x="308" y="14"  width="300" height="44" rx="3"/>
+      <text class="t"   x="322" y="33">service_provider_work_hours</text>
+      <text class="t-s" x="322" y="49">one row per weekday — the availability search</text>
+
+      <rect class="bx" x="308" y="74"  width="300" height="44" rx="3"/>
+      <text class="t"   x="322" y="93">service_provider_expertise</text>
+      <text class="t-s" x="322" y="109">companion · medical_companion · nurse · physio</text>
+
+      <rect class="bx" x="308" y="134" width="300" height="44" rx="3"/>
+      <text class="t"   x="322" y="153">service_provider_addresses</text>
+      <text class="t-s" x="322" y="169">home and office, each with lat/lng</text>
+
+      <rect class="bx" x="308" y="194" width="300" height="44" rx="3"/>
+      <text class="t"   x="322" y="213">service_provider_calendar_blocks</text>
+      <text class="t-s" x="322" y="229">time off — removes them from results</text>
+
+      <rect class="bx" x="308" y="254" width="300" height="44" rx="3"/>
+      <text class="t"   x="322" y="273">provider_location_log</text>
+      <text class="t-s" x="322" y="289">GPS ping history — feeds Live Tracking</text>
+
+      <rect class="bx-m" x="308" y="314" width="300" height="44" rx="3"/>
+      <text class="t"   x="322" y="333">organization_service_fees</text>
+      <text class="t-m" x="322" y="349">org rate card — overrides the employee's rate</text>
+
+      <!-- search criteria bracket -->
+      <path class="ln-d" d="M620 36 L 640 36 L 640 216 L 620 216"/>
+      <text class="t-s" x="652" y="112">the four things</text>
+      <text class="t-s" x="652" y="127">a search filters on,</text>
+      <text class="t-s" x="652" y="142">plus distance from</text>
+      <text class="t-s" x="652" y="157">the customer's pin</text>
+    </svg>
+    <figcaption><b>Two independent switches.</b>
+    <span class="m">approval_status</span> (<span class="m">pending / approved /
+    hold / rejected</span>) decides whether a provider appears in search;
+    <span class="m">status</span> (<span class="m">active / blocked</span>) decides
+    whether they can sign in at all. An admin can block an approved provider
+    without losing the approval, and un-blocking restores them without a second
+    review.</figcaption>
+  </figure>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Table</th><th>Key</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr><td class="name">service_providers</td><td class="key">provider_id</td><td class="what">Everyone who delivers a service. <span class="m">provider_kind</span> separates freelancer, organization and employee; <span class="m">organization_id</span> is the self-reference. Carries four document URLs with validity dates, a login PIN hash, live coordinates, and the <span class="m">no_fees</span> volunteer flag.</td></tr>
+      <tr><td class="name">service_provider_work_hours</td><td class="key">→ provider_id</td><td class="what">One row per weekday, unique per pair. A booking's day and time window is matched against this.</td></tr>
+      <tr><td class="name">service_provider_expertise</td><td class="key">→ provider_id</td><td class="what">Which of the four services they are qualified for, with years of experience.</td></tr>
+      <tr><td class="name">service_provider_addresses</td><td class="key">→ provider_id</td><td class="what">Home and office, each with coordinates and its own maximum travel distance preference.</td></tr>
+      <tr><td class="name">service_provider_calendar_blocks</td><td class="key">→ provider_id</td><td class="what">Declared unavailability. Overlapping a block removes them from results.</td></tr>
+      <tr><td class="name">provider_location_log</td><td class="key">→ provider_id</td><td class="what">Append-only GPS history, written while location sharing is on.</td></tr>
+      <tr><td class="name">organization_service_fees</td><td class="key">→ organization_id</td><td class="what">An organization's per-service hourly rate, which overrides each employee's own rate when set.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<section id="money">
+  <h2><span class="num">05 — the visit and the money</span>How an hour becomes an amount</h2>
+  <p class="lede">A booking can span many days. Each day worked is one
+  <span class="m">booking_service_sessions</span> row, and that row is where
+  hours, rates and both sides of the money meet.</p>
+
+  <figure>
+    <svg viewBox="0 0 880 300" role="img" aria-label="Rates come from revenue_sharing_config into the session row. A session is created, the OTP is verified, start and end times are recorded, hours are multiplied by the rates to produce a provider payout and a customer amount, and payments recorded by the provider accumulate on the booking. If the provider is marked no fees, hours are credited to the time bank ledger as points instead of being billed.">
+      <defs>
+        <marker id="a7" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+          <polygon points="0,0 10,4 0,8" fill="currentColor"/>
+        </marker>
+        <marker id="a8" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6" orient="auto">
+          <polygon points="0,0 10,4 0,8" fill="var(--money)"/>
+        </marker>
+      </defs>
+
+      <!-- rate source -->
+      <rect class="bx-m" x="470" y="0" width="200" height="44" rx="3"/>
+      <text class="t"   x="570" y="21" text-anchor="middle">revenue_sharing_config</text>
+      <text class="t-m" x="570" y="36" text-anchor="middle">customer rate · provider rate · partner</text>
+      <line class="ln-m" x1="570" y1="44" x2="570" y2="108" marker-end="url(#a8)"/>
+
+      <!-- main lane -->
+      <rect class="bx" x="4"   y="110" width="156" height="56" rx="3"/>
+      <text class="t"   x="82" y="134" text-anchor="middle">session row</text>
+      <text class="t-s" x="82" y="151" text-anchor="middle">one per day worked</text>
+
+      <rect class="bx" x="184" y="110" width="156" height="56" rx="3"/>
+      <text class="t"   x="262" y="134" text-anchor="middle">otp_verified_at</text>
+      <text class="t-s" x="262" y="151" text-anchor="middle">customer reads it out</text>
+
+      <rect class="bx" x="364" y="110" width="156" height="56" rx="3"/>
+      <text class="t"   x="442" y="134" text-anchor="middle">start / end</text>
+      <text class="t-s" x="442" y="151" text-anchor="middle">actual times</text>
+
+      <rect class="bx-m" x="544" y="110" width="156" height="56" rx="3"/>
+      <text class="t"   x="622" y="134" text-anchor="middle">total_hours</text>
+      <text class="t-m" x="622" y="151" text-anchor="middle">amount + customer_amount</text>
+
+      <rect class="bx-m" x="724" y="110" width="152" height="56" rx="3"/>
+      <text class="t"   x="800" y="134" text-anchor="middle">booking_payments</text>
+      <text class="t-m" x="800" y="151" text-anchor="middle">full or part</text>
+
+      <line class="ln" x1="160" y1="138" x2="180" y2="138" marker-end="url(#a7)"/>
+      <line class="ln" x1="340" y1="138" x2="360" y2="138" marker-end="url(#a7)"/>
+      <line class="ln" x1="520" y1="138" x2="540" y2="138" marker-end="url(#a7)"/>
+      <line class="ln-m" x1="700" y1="138" x2="720" y2="138" marker-end="url(#a8)"/>
+
+      <!-- branch -->
+      <path class="ln-d" d="M622 166 L 622 214" marker-end="url(#a7)"/>
+      <text class="t-s" x="634" y="192">if provider.no_fees</text>
+      <rect class="bx-s" x="484" y="216" width="276" height="50" rx="3"/>
+      <text class="t"   x="622" y="238" text-anchor="middle">time_bank_ledger</text>
+      <text class="t-s" x="622" y="255" text-anchor="middle">hours × points_per_hour — nothing billed</text>
+
+      <path class="ln-m" d="M800 166 L 800 212" marker-end="url(#a8)"/>
+      <rect class="bx-m" x="724" y="216" width="152" height="60" rx="3"/>
+      <text class="t"   x="800" y="238" text-anchor="middle">bookings</text>
+      <text class="t-m" x="800" y="254" text-anchor="middle">amount_received</text>
+      <text class="t-m" x="800" y="269" text-anchor="middle">payment_status</text>
+    </svg>
+    <figcaption><b>Two amounts, not one.</b> The session carries
+    <span class="m">amount</span> (what the provider earns) and
+    <span class="m">customer_amount</span> (what the customer owes) separately,
+    because they differ: an organization's fee plus Sathiyaa's markup is not the
+    freelancer case. Payment is recorded by hand — the provider marks what was
+    actually handed over, in full or in parts, and the booking's
+    <span class="m">payment_status</span> follows. A volunteer's hours produce no
+    invoice at all; they become points in the Time Bank.</figcaption>
+  </figure>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Table</th><th>Key</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr><td class="name">bookings</td><td class="key">booking_id</td><td class="what">The request and its outcome: service, dates, time window, gender and language preference, status, the provider who accepted, the employee assigned, and the running payment totals.</td></tr>
+      <tr><td class="name">booking_requests</td><td class="key">→ booking_id, provider_id</td><td class="what">The fan-out. One row per provider offered the job, unique per pair.</td></tr>
+      <tr><td class="name">booking_service_sessions</td><td class="key">→ booking_id, provider_id</td><td class="what">One row per day worked. Start OTP, actual start and end, hours, both amounts, and the <span class="m">is_no_fees</span> flag.</td></tr>
+      <tr><td class="name">booking_payments</td><td class="key">→ booking_id</td><td class="what">Cash recorded by the provider, full or part, with a note. Sums into <span class="m">bookings.amount_received</span>.</td></tr>
+      <tr><td class="name">booking_transfers</td><td class="key">→ booking_id</td><td class="what">Handover from one provider to another, with its own accept/reject.</td></tr>
+      <tr><td class="name">booking_cancellations</td><td class="key">→ booking_id</td><td class="what">Who cancelled, how many hours before the start, the fee charged and the refund due.</td></tr>
+      <tr><td class="name">ratings</td><td class="key">→ booking_id (unique)</td><td class="what">The customer's rating of the provider. One per booking.</td></tr>
+      <tr><td class="name">customer_ratings</td><td class="key">→ booking_id (unique)</td><td class="what">The provider's rating of the customer. One per booking — the feedback runs both ways.</td></tr>
+      <tr><td class="name">time_bank_ledger</td><td class="key">→ provider_id, booking_id</td><td class="what">Points earned for donated hours, priced by <span class="m">time_bank_config</span> for that service and year.</td></tr>
+      <tr><td class="name">masked_call_sessions</td><td class="key">→ booking_id</td><td class="what">A virtual number bridging customer and provider. <span class="pill stub">stub</span> — needs a telephony account.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<section id="platform">
+  <h2><span class="num">06 — partner, admin, and the record</span>Ten tables</h2>
+  <p class="lede">The business partner brings customers in; the admin approves
+  providers and sets the rates; and every mutation anywhere in the system writes
+  one audit row.</p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Table</th><th>Key</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr><td class="name">business_agents</td><td class="key">business_partner_id</td><td class="what">The partner. <span class="m">BP-000001</span>, a unique <span class="m">referral_code</span>, and their own password login to the portal.</td></tr>
+      <tr><td class="name">business_agent_referrals</td><td class="key">→ business_partner_id, customer_id</td><td class="what">Leads the partner submits. <span class="m">customer_id</span> stays null until that person actually registers, then links up.</td></tr>
+      <tr><td class="name">admin_users</td><td class="key">admin_id</td><td class="what">Console sign-ins. <span class="m">super_admin</span>, <span class="m">ops_admin</span>, <span class="m">support</span>.</td></tr>
+      <tr><td class="name">broadcast_messages</td><td class="key">→ sent_by</td><td class="what">Message, audience, who sent it, and how many it reached.</td></tr>
+      <tr><td class="name">app_configuration</td><td class="key">config_key (unique)</td><td class="what">Key/value settings the admin edits: booking charge, annual fees for new and existing users.</td></tr>
+      <tr><td class="name">revenue_sharing_config</td><td class="key">service_type + effective_from</td><td class="what">The rate card. Customer rate, provider rate and the partner's flat cut per hour, versioned by date — old bookings keep the rate that applied.</td></tr>
+      <tr><td class="name">time_bank_config</td><td class="key">service_type + year</td><td class="what">Points awarded per donated hour, per service, per year.</td></tr>
+      <tr><td class="name">transactions</td><td class="key">polymorphic</td><td class="what">Registration fees, booking charges, cancellation fees, renewals. <span class="pill stub">stub</span> — gateway column is set but no money moves.</td></tr>
+      <tr><td class="name">audit_log</td><td class="key">polymorphic</td><td class="what">Every mutation: who, what form, what action, which device, the coordinates at the time, and a JSON payload.</td></tr>
+      <tr><td class="name">otp_log</td><td class="key">polymorphic</td><td class="what">Issued codes and whether they were used, for login and reset.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note warn">
+    <b>Seven joins have no foreign key, deliberately.</b> Anyone writing a query
+    against these needs to know they will not be caught by the database:
+    <span class="m">transactions</span>, <span class="m">audit_log</span> and
+    <span class="m">otp_log</span> are polymorphic — their
+    <span class="m">reference_id</span> / <span class="m">user_id</span> means a
+    different table depending on the <span class="m">*_type</span> column beside
+    it. <span class="m">customers.referred_by_code</span> joins a partner by
+    <em>code string</em>, not id. <span class="m">approved_by</span> and
+    <span class="m">updated_by</span> point at <span class="m">admin_users</span>,
+    and <span class="m">booking_payments.recorded_by</span> at a provider, without
+    a constraint. <span class="m">user_devices.user_id</span> joins this list: it means one of four tables depending on <span class="m">user_type</span>. That is 44 enforced keys and eight you must get right yourself.
+  </div>
+</section>
+
+<!-- ================================================================= -->
+<section id="state">
+  <h2><span class="num">07 — where it stands</span>Verified, on this machine, today</h2>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Check</th><th>Result</th><th>What it covers</th></tr></thead>
+    <tbody>
+      <tr><td class="name">live schema</td><td class="key">39 tables · 44 FKs</td><td class="what">Matches migrations 001–011 exactly, read back from <span class="m">information_schema</span>.</td></tr>
+      <tr><td class="name">audit-everything</td><td class="key">158 / 158</td><td class="what">Every route in the API, including the ones no normal journey touches, plus refusals and injection attempts.</td></tr>
+      <tr><td class="name">practical</td><td class="key">74 / 74</td><td class="what">The whole journey: register, approve, search, book, accept, OTP, work, pay, rate, block.</td></tr>
+      <tr><td class="name">contract-drift</td><td class="key">no drift</td><td class="what">What the server sends against what the admin console's types expect, across nine list endpoints.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>What is deliberately not real yet</h3>
+  <ul class="clean">
+    <li><b>Payments</b> — no gateway. The tables and the flow exist; confirming records the charge and moves on. Nothing is debited.</li>
+    <li><b>SMS</b> — OTPs appear on screen instead of being sent. No provider, no bill.</li>
+    <li><b>Push notifications</b> — the apps poll every 20 seconds instead.</li>
+    <li><b>Face matching</b> — the arrival photo is genuinely taken, uploaded and stored against the booking. The automated comparison is off.</li>
+    <li><b>Masked calls</b> — the provider sees and dials the real number. Masking needs a paid telephony account.</li>
+  </ul>
+  <p style="color:var(--muted)">Each of those is a provider-selector swap, not a
+  rewrite: the adapter is stubbed by default and an environment variable points it
+  at a real one. The schema already carries the columns each would fill.</p>
+
+  <div class="note">
+    <b>Where this stood, and where it stands.</b> The earlier version of this
+    page warned that the schema had not been checked against the two reference
+    apps, and that anything they asked for which this model did not hold — a chat
+    thread, booking on somebody else's behalf — would be new tables rather than a
+    tweak. That was exactly right, and those tables now exist: migrations 008 to
+    011 added the device registry, the dependent on a booking, emergency alerts
+    and the message thread. What is still unchecked against the reference build is
+    anything to do with subscriptions or shift rosters.
+  </div>
+</section>
+
+
+<!-- ================================================================= -->
+<section id="added">
+  <h2><span class="num">09 — added</span>Three tables that answer questions the schema could not</h2>
+  <p class="lede">Added 19 September, in migrations 008 to 011. Each one exists
+  because something the platform needed to be able to say afterwards had nowhere
+  to be written down.</p>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Table</th><th>Key</th><th>What it holds</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="name">user_devices</td>
+        <td class="key">user_type + user_id + device_id</td>
+        <td class="what">Every handset an account has signed in from: make, model, OS
+        version, app version, whether it is a real device or an emulator, first and
+        last seen, and the address the request came from.
+        <b>No foreign key, deliberately</b> — <span class="m">user_id</span> points
+        at one of four tables depending on <span class="m">user_type</span>, which a
+        constraint cannot express; the joins live in the admin controller instead.
+        A table rather than more columns on the account, because the question worth
+        answering after something goes wrong is "which devices has this account been
+        on", and a single column cannot answer it.</td>
+      </tr>
+      <tr>
+        <td class="name">sos_alerts</td>
+        <td class="key">→ customer_id, booking_id</td>
+        <td class="what">One row per emergency raised, written <em>before</em> any
+        message is attempted — a gateway that is down must not lose the fact that
+        somebody pressed the button.
+        <span class="m">delivery</span> distinguishes <span class="m">simulated</span>
+        from <span class="m">sent</span>, which is what lets the app be honest on
+        screen when no SMS provider is configured.
+        <span class="m">recipients</span> is JSON because it is a list of
+        who-and-what-happened and nothing queries inside it.
+        <span class="m">acknowledged_at</span> and
+        <span class="m">resolution</span> are how the office closes one, and a blank
+        resolution is refused.</td>
+      </tr>
+      <tr>
+        <td class="name">booking_messages</td>
+        <td class="key">→ booking_id</td>
+        <td class="what">The thread on a booking, read from both ends.
+        <span class="m">sender_type</span> includes <span class="m">system</span>, so
+        the app's own notes — visit started, running late — sit in the same sequence
+        rather than having to be merged with events from elsewhere.
+        <span class="m">read_at</span> null means unread, which is what drives both
+        badges. Tied to a booking rather than an open inbox: an open messaging
+        surface between strangers on a care platform is a safeguarding problem, and
+        the booking is what makes the conversation legitimate.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="lede" style="margin-top:20px">Migration 009 added no table. It added
+  <span class="m">bookings.for_family_member_id</span> — nullable, pointing at
+  <span class="m">customer_family_members</span> — so a booking can be for
+  somebody other than the person who made it. <b>NULL means "for the account
+  holder"</b>, which keeps every row written before it correct without a
+  backfill, and is what every screen keys off. It also gave family members a
+  <span class="m">date_of_birth</span> and a <span class="m">notes</span> column,
+  because a carer visiting somebody needs to know how old they are and whether
+  to knock twice.</p>
+</section>
+
+<footer>
+  <p>Generated from <code>backend/src/db/migrations/001–011</code> and verified
+  against the running database on 19 September 2026 — the table and key counts
+  above were read back from <code>information_schema</code>, not counted by hand.
+  The machine-readable source
+  is <code>docs/erd.mmd</code>; the authoritative definition is always the
+  migration files themselves.</p>
+</footer>
+
+</div>

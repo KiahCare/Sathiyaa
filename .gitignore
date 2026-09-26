@@ -1,0 +1,59 @@
+# Nothing in this repository is copied by hand: `scripts/sync-to-github.ps1`
+# writes it from an allowlist and refuses to copy a file containing a live
+# secret. This file is the second line of defence, not the first.
+
+# ---- secrets ---------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+key.properties
+*accessKeys*.csv
+*credentials*.csv
+
+# ---- dependencies ---------------------------------------------------------
+node_modules/
+.pub-cache/
+.packages
+.dart_tool/
+
+# ---- build output --------------------------------------------------------
+build/
+dist/
+dist-cloud/
+dist-demo/
+dist-live/
+*.apk
+*.aab
+*.tar.gz
+
+# Android local toolchain paths
+android/local.properties
+android/.gradle/
+android/gradlew
+android/gradlew.bat
+*.iml
+
+# ---- runtime data -------------------------------------------------------
+# Documents people upload: identity papers, police verifications, medical
+# certificates, prescriptions, photographs. These belong on a server with
+# access control, never in source control.
+uploads/
+
+# ---- editors and operating systems --------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ---- logs ---------------------------------------------------------------
+logs/
+*.log
+npm-debug.log*
