@@ -212,7 +212,7 @@ where they are.
 | Provider choice | `backend/src/integrations/faceMatch.js` |
 | Settings | `backend/src/config/env.js` (`aws`, `faceMatch`) |
 | Where it is called | `providerSelfController.js`, start-of-service |
-| Self-test | `backend-scripts/check-rekognition.mjs` |
+| Self-test | `scripts/check-rekognition.mjs` |
 
 The adapter signs its own requests rather than pulling in the AWS SDK —
 forty-odd packages for one HTTP call, on a free-tier box that reinstalls its

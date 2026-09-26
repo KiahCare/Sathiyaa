@@ -20,7 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const backend = path.resolve(here, '../sathiyaa-full-project - Flutter Web version/backend');
+const backend = path.resolve(here, '..');
 
 // Load the server's own .env if it is there, so this can be run without
 // exporting anything by hand.

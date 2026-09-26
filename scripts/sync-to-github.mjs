@@ -128,13 +128,6 @@ const RULES = [
     skip: [],
   },
   {
-    what: 'server-side maintenance scripts',
-    from: 'backend-scripts',
-    to: 'scripts/backend',
-    only: null,
-    skip: [],
-  },
-  {
     what: 'test plans, audits and the deployment runbook',
     from: '_builds',
     to: 'docs',

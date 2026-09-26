@@ -16,10 +16,10 @@
  *      instead of a link to nothing, and the provider can be asked again.
  *
  * Run from the backend folder so it reads the same .env the server does:
- *   node repair-upload-urls.mjs           # report only
- *   node repair-upload-urls.mjs --apply   # make the changes
+ *   node scripts/repair-upload-urls.mjs           # report only
+ *   node scripts/repair-upload-urls.mjs --apply   # make the changes
  */
-import { query } from './src/db/pool.js';
+import { query } from '../src/db/pool.js';
 
 const APPLY = process.argv.includes('--apply');
 

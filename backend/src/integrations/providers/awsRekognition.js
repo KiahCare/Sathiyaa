@@ -197,7 +197,7 @@ export async function verifyFace(selfieUrl, referencePhotoUrl) {
  * region and the permission are all correct. Anything else comes back as the
  * AWS error type, which is what actually needs fixing.
  *
- * Used by backend-scripts/check-rekognition.mjs.
+ * Used by scripts/check-rekognition.mjs.
  */
 export async function probeCredentials() {
   if (!env.aws.accessKeyId || !env.aws.secretAccessKey) {
