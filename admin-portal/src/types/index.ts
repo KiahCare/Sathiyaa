@@ -178,6 +178,12 @@ export interface BusinessAgentReferral {
   referral_code: string;
   hours_used?: number;
   revenue_earned?: number;
+  /** The carer allocated to this referral. Null until an admin allocates it. */
+  allocated_provider_id?: number | null;
+  allocated_provider_name?: string | null;
+  allocated_provider_display_id?: string | null;
+  allocated_provider_mobile?: string | null;
+  allocated_at?: string | null;
 }
 
 export interface BusinessAgentRevenueSummary {

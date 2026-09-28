@@ -282,8 +282,60 @@ async function attachProviderDetail(rows) {
   }));
 }
 
+/**
+ * Free-text search across a directory listing, ranked.
+ *
+ * Both console lists have always had a search box and have always sent the
+ * term. Neither end read it, so typing a name reloaded the same unfiltered
+ * list in registration order -- reported as "searched for a carer, she did
+ * not come to the top", which she was never going to.
+ *
+ * Returns the WHERE fragment, the ORDER BY fragment, and the two parameter
+ * lists that go with them. They are separate because the caller has other
+ * filters to put between them, and SQL wants the WHERE parameters first.
+ *
+ * `alias` and `columns` are never user input -- both call sites pass literals.
+ * The search term is always a bound parameter.
+ *
+ * LIKE rather than full-text: these directories hold thousands of rows, not
+ * millions, and a name index would not help a pattern with a leading wildcard
+ * anyway. Revisit if either list ever gets large enough to feel it.
+ */
+function searchClause(search, alias, columns) {
+  // Capped before anything else. Nothing anybody is looking for is longer than
+  // this, the columns being matched are all shorter, and an uncapped term is a
+  // free way to make the server build and run a very large query.
+  const term = typeof search === 'string' ? search.trim().slice(0, 100) : '';
+  if (!term) return { where: null, orderBy: '', whereParams: [], orderParams: [] };
+
+  // Escape the wildcards, so a term containing % or _ searches for those
+  // characters rather than matching every row in the table.
+  const escaped = term.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const like = `%${escaped}%`;
+  const [nameCol, idCol, mobileCol] = columns;
+
+  // Ranked, because "contains" is not an answer when a term matches forty
+  // rows. Exact name first, then names beginning with the term, then an exact
+  // id or mobile, then a name containing it, then matches on anything else --
+  // so the person being looked for is at the top rather than in the middle.
+  const orderBy = `CASE
+                     WHEN ${alias}.${nameCol} = ? THEN 0
+                     WHEN ${alias}.${nameCol} LIKE ? THEN 1
+                     WHEN ${alias}.${idCol} = ? OR ${alias}.${mobileCol} = ? THEN 2
+                     WHEN ${alias}.${nameCol} LIKE ? THEN 3
+                     ELSE 4
+                   END, `;
+
+  return {
+    where: `(${columns.map((c) => `${alias}.${c} LIKE ?`).join(' OR ')})`,
+    orderBy,
+    whereParams: columns.map(() => like),
+    orderParams: [term, `${escaped}%`, term, term, like],
+  };
+}
+
 export const listProviders = asyncHandler(async (req, res) => {
-  const { status } = req.query;
+  const { status, search } = req.query;
   // The organisation's name, for a carer who belongs to one.
   //
   // Org employees are in this list and are approved from it -- an admin
@@ -294,11 +346,20 @@ export const listProviders = asyncHandler(async (req, res) => {
                FROM service_providers p
                LEFT JOIN service_providers org ON org.provider_id = p.organization_id`;
   const params = [];
+  const where = [];
   // The console sends `all` for its "All" tab; treat that as no filter rather
   // than matching an approval_status literally named "all", which matched
   // nothing and made the tab look empty.
-  if (status && status !== 'all') { sql += ' WHERE p.approval_status = ?'; params.push(status); }
-  sql += ' ORDER BY p.created_at DESC';
+  if (status && status !== 'all') { where.push('p.approval_status = ?'); params.push(status); }
+
+  const find = searchClause(search, 'p', ['name', 'display_id', 'mobile_number', 'email']);
+  if (find.where) { where.push(find.where); params.push(...find.whereParams); }
+
+  if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+  sql += ` ORDER BY ${find.orderBy}p.created_at DESC`;
+  // After the WHERE parameters, because ORDER BY is the later clause.
+  params.push(...find.orderParams);
+
   const rows = await query(sql, params);
   res.json({ providers: await attachProviderDetail(rows) });
 });
@@ -366,7 +427,7 @@ export const unblockProvider = asyncHandler(async (req, res) => {
 });
 
 export const listCustomers = asyncHandler(async (req, res) => {
-  const { status } = req.query;
+  const { status, search } = req.query;
   // The console shows a city per customer, taken from the primary address.
   let sql = `SELECT c.customer_id, c.display_id, c.name, c.photo_url, c.dob, c.gender,
                     c.blood_group, c.email, c.mobile_number, c.registration_fee_paid,
@@ -376,8 +437,17 @@ export const listCustomers = asyncHandler(async (req, res) => {
                LEFT JOIN customer_addresses a
                  ON a.customer_id = c.customer_id AND a.address_type = 'primary'`;
   const params = [];
-  if (status && status !== 'all') { sql += ' WHERE c.status = ?'; params.push(status); }
-  sql += ' ORDER BY c.created_at DESC';
+  const where = [];
+  if (status && status !== 'all') { where.push('c.status = ?'); params.push(status); }
+
+  // Same box, same term, same fix as the provider list above.
+  const find = searchClause(search, 'c', ['name', 'display_id', 'mobile_number', 'email']);
+  if (find.where) { where.push(find.where); params.push(...find.whereParams); }
+
+  if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+  sql += ` ORDER BY ${find.orderBy}c.created_at DESC`;
+  params.push(...find.orderParams);
+
   const rows = await query(sql, params);
   res.json({ customers: rows });
 });
@@ -559,7 +629,15 @@ export const putConfig = asyncHandler(async (req, res) => {
   const cleaned = {};
   for (const [key, raw] of Object.entries(updates)) {
     if (TEXT_KEYS.has(key)) {
-      const text = String(raw ?? '').trim();
+      // `service_area_city` holds a comma-separated list now that Sathiyaa
+      // serves Ahmedabad and Gandhinagar, so the stray commas and doubled
+      // spaces an administrator leaves behind while editing are tidied here
+      // rather than stored and matched against for ever.
+      const text = String(raw ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(', ');
       if (text.length < 2) {
         throw Errors.badRequest('VALIDATION', `${key} needs a place name — got ${JSON.stringify(raw)}`);
       }
@@ -981,10 +1059,29 @@ export const allocateReferral = asyncHandler(async (req, res) => {
   if (candidates.length === 0) throw Errors.conflict('NO_PROVIDER_AVAILABLE', 'No approved, available provider matches this referral');
 
   const chosen = candidates[0];
-  await query('UPDATE business_agent_referrals SET status = "booked" WHERE id = ?', [id]);
+  // Written down, not just returned.
+  //
+  // This used to set the status and hand the carer's name back in the response,
+  // where it was read once and lost. Reopening the partner showed 'booked' and
+  // nothing else -- so "who did you send?" had no answer anywhere in the
+  // console or the database. Asked for directly by the client.
+  await query(
+    `UPDATE business_agent_referrals
+        SET status = 'booked', allocated_provider_id = ?, allocated_at = NOW(), allocated_by = ?
+      WHERE id = ?`,
+    [chosen.provider_id, adminId(req), id]
+  );
   await req.audit('AdminAllocateReferral', 'UPDATE', { referralId: id, providerId: chosen.provider_id });
 
-  res.json({ referralId: Number(id), allocatedProviderId: chosen.provider_id, providerName: chosen.name });
+  res.json({
+    referralId: Number(id),
+    allocatedProviderId: chosen.provider_id,
+    providerName: chosen.name,
+    // How many others could have taken it. One candidate means this referral
+    // has no fallback if that carer drops out, which is worth knowing at the
+    // moment of allocating rather than on the morning of the visit.
+    alternatives: candidates.length - 1,
+  });
 });
 
 // ---------------------------------------------------------------------

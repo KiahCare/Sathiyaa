@@ -454,6 +454,49 @@ export function getAgentRevenue(businessPartnerId: number): Promise<AgentRevenue
   return fetchRevenue(`/admin/business-agents/${businessPartnerId}/revenue`, businessPartnerId);
 }
 
+export interface ReferralAllocation {
+  referralId: number;
+  allocatedProviderId: number;
+  providerName: string;
+  /** How many other carers also matched. Zero means no fallback. */
+  alternatives: number;
+}
+
+/**
+ * Allocates a carer to a referral.
+ *
+ * The endpoint has existed since the referral feature was built and nothing
+ * in the console ever called it, so a referral submitted by a partner could
+ * never be moved off 'pending' by anybody. The server picks the best match on
+ * service type, availability and gender preference; this is the button that
+ * asks it to.
+ */
+export async function allocateReferral(referralId: number): Promise<ReferralAllocation> {
+  if (USE_MOCK) {
+    await mockDelay(500);
+    const referral = store.referrals.find((r) => r.id === referralId);
+    if (!referral) throw new ApiRequestError('NOT_FOUND', 'Referral not found.', 404);
+    const match = store.providers.find(
+      (p) => p.approval_status === 'approved' && p.status === 'active'
+        && p.expertise.some((e) => e.service_type === referral.service_type)
+    );
+    if (!match) {
+      throw new ApiRequestError(
+        'NO_PROVIDER_AVAILABLE', 'No approved, available provider matches this referral.', 409
+      );
+    }
+    referral.status = 'booked';
+    referral.allocated_provider_id = match.provider_id;
+    referral.allocated_provider_name = match.name;
+    referral.allocated_at = new Date().toISOString();
+    return {
+      referralId, allocatedProviderId: match.provider_id, providerName: match.name, alternatives: 0,
+    };
+  }
+  const { data } = await apiClient.post(`/admin/business-agents/referrals/${referralId}/allocate`);
+  return data;
+}
+
 /** Partner portal, the signed-in partner's own revenue. */
 export function getMyRevenue(businessPartnerId: number): Promise<AgentRevenueSummary> {
   return fetchRevenue('/business-agents/me/revenue', businessPartnerId);

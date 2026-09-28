@@ -89,6 +89,30 @@ const nearVerdict = await call('PUT', '/customers/me/signup-place', {
 mark(nearVerdict.json?.inServiceArea === true,
   'Gandhinagar is inside too -- 30 km out, and a carer drives it');
 
+// The same place with no coordinates at all.
+//
+// This passed on the radius before Gandhinagar was named in the configuration,
+// which meant it only worked for a phone with a working fix. Someone indoors
+// who declined the location prompt fell through to the city-name check, matched
+// nothing, and was turned away from a city we serve. Now the name is enough on
+// its own, and this is the test that says so.
+const byName = await registerCustomer('Test Area By Name');
+const byNameVerdict = await call('PUT', '/customers/me/signup-place', {
+  token: byName.token, body: { city: 'Gandhinagar', state: 'Gujarat' },
+});
+mark(byNameVerdict.json?.inServiceArea === true,
+  'Gandhinagar by name alone is inside -- no coordinates needed');
+
+// And the anchoring that came with it. "Nagar" is a substring of Gandhinagar
+// and also the name of half the localities in Gujarat; an unanchored match
+// would have let every one of them register.
+const nagar = await registerCustomer('Test Area Nagar');
+const nagarVerdict = await call('PUT', '/customers/me/signup-place', {
+  token: nagar.token, body: { city: 'Nagar', state: 'Maharashtra' },
+});
+mark(nagarVerdict.json?.inServiceArea === false,
+  'but a place merely called "Nagar" is not Gandhinagar');
+
 const far = await registerCustomer('Test Area Far');
 const farVerdict = await call('PUT', '/customers/me/signup-place', {
   token: far.token, body: RAJKOT,

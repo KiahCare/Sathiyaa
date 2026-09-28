@@ -101,7 +101,14 @@ const RULES = [
     to: 'docs',
     only: ['api-contract.md', 'schema.sql', 'coverage-matrix.md', 'erd.mmd',
            'erd.png', 'erd.html', 'sql-update-delete-queries.md',
-           'AWS-REKOGNITION.md', 'Sathiyaa MVP Requirements.docx'],
+           'AWS-REKOGNITION.md', 'Sathiyaa MVP Requirements.docx',
+           // How to switch each integration on. No keys, no account numbers --
+           // these are the steps, which are the same for anybody. The one file
+           // that does name our own instances and buckets is
+           // AWS\NEW-ACCOUNT-AND-MIGRATION.md, and the whole AWS folder is
+           // outside every rule here.
+           'setup',
+           'client-feedback-2026-09-29.md'],
     skip: [],
   },
   {
@@ -152,8 +159,15 @@ function walk(absDir, rel, skip, out) {
     const childRel = rel ? `${rel}/${e.name}` : e.name;
     if (skip.some((re) => re.test(childRel))) continue;
     const abs = path.join(absDir, e.name);
-    if (e.isDirectory()) walk(abs, childRel, skip, out);
-    else if (e.isFile()) out.push(childRel);
+    if (e.isDirectory()) {
+      // Never walk into another repository. A clone sitting inside this one
+      // is not part of it, and the `removed` pass deletes everything it finds
+      // that no rule claims -- which for a nested clone means the checkout and
+      // its .git with it. One did appear here: a clone of a second GitHub repo,
+      // made while setting this one up.
+      if (fs.existsSync(path.join(abs, '.git'))) continue;
+      walk(abs, childRel, skip, out);
+    } else if (e.isFile()) out.push(childRel);
   }
   return out;
 }
