@@ -77,6 +77,7 @@ $suite = @(
     'booking-for-dependent',
     'choose-carers',
     'organisation-registration',
+    'admin-create-provider',
     'provider-languages',
     'service-area-and-fees',
     'sos',

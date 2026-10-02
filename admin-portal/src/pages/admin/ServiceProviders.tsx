@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ApprovalStatus, ServiceProvider } from '../../types';
+import type { ApprovalStatus, NewProviderResult, ServiceProvider } from '../../types';
 import { SERVICE_TYPE_LABELS, DAY_LABELS } from '../../types';
 import { uploadUrl } from '../../api/client';
 import {
@@ -10,6 +10,7 @@ import {
   PageHeader, ApprovalBadge, StatusBadge, TableSkeleton, EmptyState, ErrorState,
   ConfirmDialog, Modal, InlineBanner,
 } from '../../components/ui';
+import AddProviderDialog, { ProviderCreatedPanel } from './AddProviderDialog';
 
 const STATUS_TABS: { value: ApprovalStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -37,6 +38,10 @@ export default function ServiceProviders() {
   const [selected, setSelected] = useState<ServiceProvider | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  // Held only while the confirmation panel is open: the PIN the form submitted,
+  // which the server does not send back and nothing persists.
+  const [created, setCreated] = useState<{ result: NewProviderResult; pin: string } | null>(null);
 
   async function load() {
     setError(null);
@@ -125,6 +130,11 @@ export default function ServiceProviders() {
       <PageHeader
         title="Service Providers"
         subtitle="Review new registrations, approve for customer search, or hold/block providers."
+        actions={(
+          <button className="btn btn-primary" onClick={() => setAdding(true)}>
+            + Add provider
+          </button>
+        )}
       />
 
       {toast && <InlineBanner kind="success">{toast}</InlineBanner>}
@@ -319,6 +329,28 @@ export default function ServiceProviders() {
           confirmLabel="Unblock provider"
           onConfirm={() => handleUnblock(dialog.provider)}
           onCancel={() => setDialog(null)}
+        />
+      )}
+
+      {adding && (
+        <AddProviderDialog
+          onClose={() => setAdding(false)}
+          onCreated={(result, pin) => {
+            setAdding(false);
+            setCreated({ result, pin });
+            load();
+          }}
+        />
+      )}
+
+      {created && (
+        <ProviderCreatedPanel
+          result={created.result}
+          pin={created.pin}
+          onClose={() => {
+            setToast(`${created.result.provider.name} has been added as ${created.result.provider.display_id}.`);
+            setCreated(null);
+          }}
         />
       )}
     </div>

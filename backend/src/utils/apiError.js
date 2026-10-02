@@ -1,8 +1,15 @@
 export class ApiError extends Error {
-  constructor(status, code, message) {
+  /**
+   * @param {number} status
+   * @param {string} code
+   * @param {string} message
+   * @param {Record<string,string>} [fields] which input was wrong, and why
+   */
+  constructor(status, code, message, fields) {
     super(message);
     this.status = status;
     this.code = code;
+    if (fields) this.fields = fields;
   }
 }
 
@@ -27,5 +34,21 @@ export const Errors = {
   notFound: (message = 'Not found') => new ApiError(404, 'NOT_FOUND', message),
   conflict: (code, message) => new ApiError(409, code, message),
   unprocessable: (code, message) => new ApiError(422, code, message),
+
+  /**
+   * A form that was filled in wrongly, said field by field.
+   *
+   * The console's longer forms submit a dozen answers at once. A single
+   * sentence ("name, mobile and providerKind are required") makes the person
+   * filling it in re-read every box to work out which one it means, and says
+   * nothing at all about the second problem. `fields` is keyed by the name the
+   * form uses for its input, so the message lands next to the box it is about
+   * and every problem is reported in one round trip rather than one per submit.
+   *
+   * `message` is still there for anything that only shows one line.
+   */
+  validation: (fields, message = 'Some of these answers need correcting.') =>
+    new ApiError(422, 'VALIDATION', message, fields),
+
   internal: (message = 'Internal server error') => new ApiError(500, 'INTERNAL_ERROR', message),
 };

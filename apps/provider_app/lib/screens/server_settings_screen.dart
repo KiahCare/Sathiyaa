@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../backend.dart';
+import '../services/device_info.dart';
 import '../theme/sathiyaa_theme.dart';
 import '../widgets/motion.dart';
 import '../widgets/sathiyaa_ui.dart';
@@ -260,6 +261,34 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
                       ),
                     ],
                   ),
+                ),
+
+                // What this build is.
+                //
+                // On the Server screen because that is where somebody already
+                // is when they are being helped over the phone, and the first
+                // question is always which version they are on. DeviceInfo has
+                // read both of these since the device registry was added -- it
+                // sends them as headers on every request -- and until now
+                // there was nowhere in either app to see them.
+                const SizedBox(height: 18),
+                SectionLabel(t('This app')),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded, size: 15, color: SC.inkFaint),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        [
+                          if (DeviceInfo.appVersion.isNotEmpty)
+                            t('Version {v}', {'v': DeviceInfo.appVersion}),
+                          DeviceInfo.summary,
+                        ].join(' · '),
+                        style: ST.small.copyWith(fontSize: 12, height: 1.45),
+                      ),
+                    ),
+                  ],
                 ),
               ]),
             ),

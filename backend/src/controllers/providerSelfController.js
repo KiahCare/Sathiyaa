@@ -10,6 +10,9 @@ import * as push from '../integrations/push.js';
 import { getDirections } from '../integrations/maps.js';
 import { createOrder, verifyPayment } from '../integrations/payment.js';
 import { recordSignupPlace } from '../services/serviceArea.js';
+import {
+  createProviderAccount, normaliseAddresses, normaliseExpertise, normaliseWorkHours,
+} from '../services/providerAccounts.js';
 import { registrationStanding, transactionTypeFor } from '../services/registrationFee.js';
 import { computeRevenueSplit } from '../services/revenueSharing.js';
 import { writeAuditLog } from '../middleware/audit.js';
@@ -823,75 +826,48 @@ export const addEmployee = asyncHandler(async (req, res) => {
     addr = b.address;
   }
 
-  const employee = await withTransaction(async (conn) => {
-    const [result] = await conn.query(
-      `INSERT INTO service_providers
-        (display_id, provider_kind, organization_id, name, photo_url, gender, dob, mobile_number, pin_hash,
-         aadhar_doc_url, police_verification_url, police_verification_valid_from,
-         police_verification_valid_to, medical_certificate_url,
-         medical_certificate_valid_from, medical_certificate_valid_to, languages,
-         distance_from_home_pref_km, distance_from_office_pref_km, approval_status, status)
-       VALUES ('PENDING', 'org_employee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
-      [
-        org.provider_id, b.name, b.photoUrl || null, normaliseGender(b.gender), b.dob || null,
-        b.mobile, pinHash,
-        // The carer's OWN documents. An organisation being approved says
-        // nothing about the person it is about to send into somebody's home,
-        // and until now these columns were left null for every employee.
-        b.aadharDocUrl || null,
-        b.policeVerificationUrl || null,
-        b.policeVerificationValidFrom || null,
-        b.policeVerificationValidTo || null,
-        b.medicalCertificateUrl || null,
-        b.medicalCertificateValidFrom || null,
-        b.medicalCertificateValidTo || null,
-        // A family filters on this. Left null, JSON_CONTAINS matches nothing,
-        // so an agency's Gujarati-speaking carer never appears in a search for
-        // Gujarati -- which is how every org employee behaved until now.
-        Array.isArray(b.languages) && b.languages.length ? JSON.stringify(b.languages) : null,
-        b.distanceFromHomePrefKm || null, b.distanceFromOfficePrefKm || null,
-        // Always pending.
-        //
-        // This used to approve a carer outright as soon as the organisation
-        // was approved and the two document fields were non-empty -- which
-        // means an agency could add somebody, attach any two photographs, and
-        // have Sathiyaa tell families that person was verified. Nobody at
-        // Sathiyaa had looked at them.
-        //
-        // Having the documents is the organisation's job. Deciding they are
-        // genuine is ours, and it happens in the admin console like it does
-        // for every carer who registers on their own.
-        'pending',
-      ]
-    );
-    const id = result.insertId;
-    await conn.query('UPDATE service_providers SET display_id = ? WHERE provider_id = ?', [displayId('SP', id), id]);
-    if (addr) {
-      await conn.query(
-        `INSERT INTO service_provider_addresses (provider_id, address_type, line1, line2, city, state, pincode, latitude, longitude)
-         VALUES (?, 'home', ?, ?, ?, ?, ?, ?, ?)`,
-        [id, addr.line1, addr.line2 || null, addr.city || null, addr.state || null, addr.pincode || null, addr.latitude || null, addr.longitude || null]
-      );
-    }
-    if (Array.isArray(b.workHours)) {
-      for (const w of b.workHours) {
-        await conn.query('INSERT INTO service_provider_work_hours (provider_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?)', [
-          id, w.dayOfWeek, w.startTime, w.endTime,
-        ]);
-      }
-    }
+  const employee = await createProviderAccount({
+    providerKind: 'org_employee',
+    organizationId: org.provider_id,
+    name: b.name,
+    photoUrl: b.photoUrl || null,
+    gender: b.gender,
+    dob: b.dob || null,
+    mobile: b.mobile,
+    pinHash,
+    // The carer's OWN documents. An organisation being approved says nothing
+    // about the person it is about to send into somebody's home, and these
+    // columns were once left null for every employee.
+    aadharDocUrl: b.aadharDocUrl || null,
+    policeVerificationUrl: b.policeVerificationUrl || null,
+    policeVerificationValidFrom: b.policeVerificationValidFrom || null,
+    policeVerificationValidTo: b.policeVerificationValidTo || null,
+    medicalCertificateUrl: b.medicalCertificateUrl || null,
+    medicalCertificateValidFrom: b.medicalCertificateValidFrom || null,
+    medicalCertificateValidTo: b.medicalCertificateValidTo || null,
+    // A family filters on this. Left null, JSON_CONTAINS matches nothing, so an
+    // agency's Gujarati-speaking carer never appears in a search for Gujarati.
+    languages: Array.isArray(b.languages) && b.languages.length ? b.languages : null,
+    distanceFromHomePrefKm: b.distanceFromHomePrefKm || null,
+    distanceFromOfficePrefKm: b.distanceFromOfficePrefKm || null,
+    // Always pending.
+    //
+    // This used to approve a carer outright as soon as the organisation was
+    // approved and the two document fields were non-empty -- which means an
+    // agency could add somebody, attach any two photographs, and have Sathiyaa
+    // tell families that person was verified. Nobody at Sathiyaa had looked at
+    // them.
+    //
+    // Having the documents is the organisation's job. Deciding they are genuine
+    // is ours, and it happens in the admin console like it does for every carer
+    // who registers on their own.
+    approvalStatus: 'pending',
+    addresses: normaliseAddresses(addr),
+    workHours: normaliseWorkHours(b.workHours, { providerKind: 'org_employee' }),
     // Without this an org's carer matched no service type, so the allocation
-    // query never returned them and an agency's staff list looked correct
-    // while being unbookable.
-    if (Array.isArray(b.expertise)) {
-      for (const e of b.expertise) {
-        await conn.query('INSERT INTO service_provider_expertise (provider_id, service_type) VALUES (?, ?)', [
-          id, typeof e === 'string' ? e : e.serviceType,
-        ]);
-      }
-    }
-    const [row] = await conn.query('SELECT * FROM service_providers WHERE provider_id = ?', [id]);
-    return row[0];
+    // query never returned them and an agency's staff list looked correct while
+    // being unbookable.
+    expertise: normaliseExpertise(b.expertise),
   });
 
   await req.audit('ProviderAddEmployee', 'CREATE', { employeeId: employee.provider_id, mobile: b.mobile });

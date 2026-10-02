@@ -6,7 +6,7 @@ in `docs/api-contract.md` against the schema in `docs/schema.sql`.
 
 ## Stack
 
-- Node.js 22, ES modules, Express 4
+- Node.js 20 or newer, ES modules, Express 4
 - MySQL 8 / MariaDB 10.11 via `mysql2/promise` (no ORM — plain
   parameterized SQL, see `src/db/pool.js`)
 - JWT auth (`jsonwebtoken`) with 4 roles: `customer`, `provider`,
@@ -18,9 +18,8 @@ in `docs/api-contract.md` against the schema in `docs/schema.sql`.
 ```bash
 npm install
 cp .env.example .env        # edit if your DB creds differ
-npm run migrate             # idempotent — applies docs/schema.sql (copied
-                             # into src/db/migrations/001_schema.sql) plus
-                             # one additive migration, safe to re-run
+npm run migrate             # idempotent — applies every file in
+                             # src/db/migrations in name order, safe to re-run
 npm run seed                # wipes + reloads realistic sample data
 npm run dev                 # http://localhost:4000, --watch reload
 ```
@@ -47,15 +46,24 @@ src/
   config/env.js             .env parsing
   db/pool.js                mysql2 pool + query()/withTransaction() helpers
   db/migrate.js             idempotent migration runner
-  db/migrations/            001_schema.sql (copy of docs/schema.sql) +
-                             002_provider_languages.sql (additive)
+  db/migrations/            001_schema.sql, then one numbered file per
+                             change. Applied in name order; never edited once
+                             they have run anywhere.
   db/seed.js                sample data
+  config/version.js         the build's version, read from package.json
+  config/preflight.js       refuses to start on an unsafe public configuration
   middleware/auth.js         JWT verify + role guard
   middleware/audit.js        req.audit(formName, action, metadata) helper
+  middleware/accessKey.js    the shared key every /api/v1 caller must present
+  middleware/rateLimit.js    general + tighter sign-in limiter
   middleware/errorHandler.js
-  integrations/              payment.js, sms.js, faceMatch.js, maps.js — stubs
-  services/                  cancellationPolicy.js, revenueSharing.js,
-                              providerMatching.js, appConfig.js
+  integrations/              payment, sms, faceMatch, maps, push, call — one
+                             interface each, with a stub and a real
+                             implementation chosen by environment variable
+  services/                  the rules: cancellationPolicy, revenueSharing,
+                              providerMatching, providerAccounts, pricing,
+                              serviceArea, appConfig, broadcastTargeting,
+                              registrationFee, messageService, sosService
   jobs/                      expireUnpaidBookings.js, run every 60s
   routes/, controllers/      one pair per API area
 ```
@@ -105,7 +113,10 @@ into whichever `*_url` column it belongs in.
 
 ```bash
 curl -X POST "$BASE/uploads?category=photo"   -H "Authorization: Bearer $TOKEN"   -F "file=@/path/to/photo.jpg"
-# -> {"url":"http://host:4000/uploads/photo/1789...-a1b2.jpg", "path":"/uploads/photo/...", ...}
+# -> {"url":"/uploads/photo/1789...-a1b2.jpg", "path":"/uploads/photo/...", ...}
+#    Relative, deliberately: an absolute URL built from the API's own Host
+#    header is the origin's internal name behind CloudFront. Every client
+#    resolves it against the API address it already knows.
 ```
 
 - Categories: `photo`, `prescription`, `aadhar`, `police-verification`,
@@ -208,13 +219,20 @@ token to register in the first place.
    can call `POST /providers/me/registration-payment` before an admin
    has approved them — matches "registration fee → activates post admin
    approval" from the requirements doc (fee comes first, then review).
-6. **Org employees added via `POST /providers/employees` auto-inherit
-   the parent org's approval status** (if the org itself is approved,
-   the employee is created pre-approved) rather than sitting in a
-   separate per-employee admin queue — the requirements doc doesn't
-   specify a separate review step for org-added staff, and re-vetting
-   every employee individually seemed like unwarranted extra process
-   for an MVP.
+6. ~~**Org employees auto-inherit the parent org's approval status.**~~
+   **Reversed, deliberately.** A carer added by an organisation via
+   `POST /providers/employees` now always starts `pending`, whatever the
+   agency's own status.
+
+   The original reasoning — that re-vetting each employee was unwarranted
+   process for an MVP — did not survive contact with what it actually
+   allowed: an agency could add somebody, attach any two photographs, and
+   have Sathiyaa tell families that person was verified, with nobody at
+   Sathiyaa having looked at them. Holding the documents is the agency's
+   job; deciding they are genuine is ours. Each carer now carries their own
+   Aadhaar and police verification and goes through the same admin queue as
+   a carer who registers alone. See the comment in
+   `controllers/providerSelfController.js`.
 7. **Work-hours/day matching in provider search & fan-out is checked
    against the booking's *start date* only**, not every day in a
    multi-day range, and calendar-block/existing-booking overlap checks
@@ -231,7 +249,11 @@ token to register in the first place.
    ("phone calls... must not show provider's name/number") both call
    for one, so it's added under `/bookings/:id/masked-call`.
 
-## Verification performed (this session)
+## Verification performed when this was first built (September 2026)
+
+Kept as a record of what was checked at the time. The current state of the
+suite is in the repository root's README, and `tests/run-all.ps1` is how it
+is re-checked.
 
 ```
 npm install

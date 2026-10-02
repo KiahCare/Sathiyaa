@@ -9,6 +9,7 @@ import { generalLimiter, authLimiter } from './middleware/rateLimit.js';
 import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 import apiRoutes from './routes/index.js';
 import { env } from './config/env.js';
+import { buildInfo } from './config/version.js';
 
 export function createApp() {
   const app = express();
@@ -40,20 +41,51 @@ export function createApp() {
 
   // Before the limiter, and before the access key: a load balancer needs to be
   // able to ask whether this process is alive without a credential.
-  app.get('/health', (req, res) => res.json({ ok: true, env: env.nodeEnv, time: new Date().toISOString() }));
+  // Which build is actually answering.
+  //
+  // Unauthenticated on purpose: this is what a load balancer polls and what
+  // somebody checks first when the console and the API disagree about
+  // something. It says what the build is, never anything about who is using it.
+  app.get('/health', (req, res) => res.json({
+    ok: true, env: env.nodeEnv, time: new Date().toISOString(), ...buildInfo,
+  }));
 
   app.use(generalLimiter);
 
   // Uploaded photos and documents. Served straight from disk here; a
   // deployment would put these behind a CDN or object store instead.
+  //
+  // THIS PATH IS NOT AUTHENTICATED, AND THAT IS A KNOWN GAP.
+  //
+  // It sits above the access-key check deliberately, because it has to: the
+  // console renders these with `<img src>`, which cannot send a header, and
+  // every stored URL is already a bare path. What protects a file is that its
+  // name is sixteen random bytes and is only ever handed to the people entitled
+  // to it — a capability URL. That is a real mechanism, and it is weaker than
+  // an access check in two specific ways: a URL that leaks stays valid forever,
+  // and nothing records who fetched it.
+  //
+  // These are identity papers, police verifications and medical certificates,
+  // so the gap is written down rather than left to be discovered. SECURITY.md
+  // says what closes it and when. Until then the three headers below are what
+  // can be done without a client change:
+  //
+  //   private      keeps CloudFront and any corporate proxy from storing
+  //                somebody's Aadhaar card in a shared cache. It was `public`
+  //                for seven days.
+  //   nosniff      never let a stored file be interpreted as a script.
+  //   noindex      a URL that escapes into a crawler's hands does not then
+  //                escape into a search index.
   app.use(
     '/uploads',
     express.static(env.uploadDir, {
-      maxAge: '7d',
       fallthrough: true,
       index: false,
-      // Never let a stored file be interpreted as a script by a browser.
-      setHeaders: (res) => res.set('X-Content-Type-Options', 'nosniff'),
+      setHeaders: (res) => {
+        res.set('Cache-Control', 'private, max-age=604800');
+        res.set('X-Content-Type-Options', 'nosniff');
+        res.set('X-Robots-Tag', 'noindex, nofollow');
+      },
     })
   );
 

@@ -114,9 +114,29 @@ export function StatCard({ label, value, sub, accent }: { label: string; value: 
 // Modal / ConfirmDialog
 // ---------------------------------------------------------------------
 
-export function Modal({ onClose, children, width }: { onClose: () => void; children: ReactNode; width?: number }) {
+/**
+ * `dismissOnBackdrop` is on by default, because for a confirmation or a detail
+ * panel clicking away is the quickest way to say "no" and nothing is lost.
+ *
+ * A long form turns that into a trap. The panel's height changes from step to
+ * step, so the gap beside it moves under the pointer between one click and the
+ * next — and a click that lands an inch wide of the button throws away
+ * everything typed so far, with no warning and no way back. Anything that holds
+ * unsaved work passes false and is closed with its own Cancel button.
+ */
+export function Modal({ onClose, children, width, dismissOnBackdrop = true }: {
+  onClose: () => void;
+  children: ReactNode;
+  width?: number;
+  dismissOnBackdrop?: boolean;
+}) {
   return createPortal(
-    <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      className="modal-overlay"
+      onMouseDown={(e) => {
+        if (dismissOnBackdrop && e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="modal-panel" style={width ? { maxWidth: width } : undefined}>{children}</div>
     </div>,
     document.body

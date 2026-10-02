@@ -29,6 +29,17 @@ const CATEGORIES = new Set([
   'police-verification',
   'work-certificate',
   'medical-certificate',
+  // An organisation's certificate of incorporation, shops-and-establishment
+  // licence, society or trust registration.
+  //
+  // This was missing, and the provider app has been sending it since the
+  // organisation registration path was built: `api_backend.dart` maps
+  // orgRegistrationUrl to the category 'org-registration', which failed the
+  // check below with a 400. Registration catches that failure deliberately so
+  // a bad upload does not lose the account — so every organisation that ever
+  // registered through the app did so with its registration certificate
+  // silently dropped, and the only sign was a line in the debug console.
+  'org-registration',
   'broadcast',
   'selfie',
 ]);

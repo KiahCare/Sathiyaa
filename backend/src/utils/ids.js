@@ -18,8 +18,3 @@ export function randomReferralCode(entityName = '') {
   return `${slug}${rand}`;
 }
 
-export function randomVirtualNumber() {
-  // Fake Indian-format virtual number for the call-masking stub.
-  const rand = Math.floor(1000000000 + Math.random() * 8999999999);
-  return `+91${String(rand).slice(0, 10)}`;
-}
