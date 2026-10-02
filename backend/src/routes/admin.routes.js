@@ -7,6 +7,11 @@ const router = Router();
 router.use(requireAuth('admin'));
 
 router.get('/providers', a.listProviders);
+// Signing up a carer or an agency from the office, rather than on their phone.
+router.post('/providers', a.createProvider);
+// Coordinates for an address somebody typed into that form. The console has no
+// GPS to ask, and a provider stored without coordinates is invisible to search.
+router.get('/geocode', a.geocodeAddress);
 router.post('/providers/:id/approve', a.approveProvider);
 router.post('/providers/:id/hold', a.holdProvider);
 router.post('/providers/:id/reject', a.rejectProvider);

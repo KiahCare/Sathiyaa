@@ -1,8 +1,8 @@
 /**
  * Where Sathiyaa currently operates, and whether a given place is inside it.
  *
- * Sathiyaa launches in Ahmedabad. The apps ask the phone where it is once, at
- * registration, and this decides what that means.
+ * Sathiyaa launched in Ahmedabad and now also serves Gandhinagar. The apps ask
+ * the phone where it is once, at registration, and this decides what that means.
  *
  * The decision is made HERE, not in the app. An app that scores itself is an
  * app that can be made to say yes by anyone who edits a request, and — more
@@ -12,7 +12,7 @@
  *
  * Two ways to be inside, and either is enough:
  *
- *   by name      the geocoder said "Ahmedabad"
+ *   by name      the geocoder named one of the configured cities
  *   by distance  the coordinates are within the radius of the centre
  *
  * Deliberately lenient. A false "we are not in your city" loses a customer
@@ -29,12 +29,31 @@ import { haversineKm } from '../utils/haversine.js';
 /** The built-in fallback, used only if the configuration rows are missing. */
 const FALLBACK = {
   enabled: true,
-  city: 'Ahmedabad',
+  city: 'Ahmedabad, Gandhinagar',
   state: 'Gujarat',
   lat: 23.0225,
   lng: 72.5714,
   radiusKm: 35,
 };
+
+/**
+ * The configured city value, as a list.
+ *
+ * `service_area_city` started as one city because Sathiyaa launched in one.
+ * It now holds a comma-separated list, because the twin-city case arrived
+ * immediately: Gandhinagar is 25 km from Ahmedabad, inside the radius, and
+ * full of people a carer can reach -- but a phone there whose geocoder says
+ * "Gandhinagar" and whose GPS was refused matched no city name and was turned
+ * away at registration.
+ *
+ * A plain string stays valid, so nothing that wrote one value breaks.
+ */
+function cityList(value) {
+  return String(value || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 /** The live service area, as the console has it. */
 export async function getServiceArea() {
@@ -46,9 +65,14 @@ export async function getServiceArea() {
     getConfigNumber('service_area_lng', FALLBACK.lng),
     getConfigNumber('service_area_radius_km', FALLBACK.radiusKm),
   ]);
+  const cities = cityList(city);
   return {
     enabled: String(enabled).toLowerCase() !== 'false',
+    // `city` stays a string for every existing caller -- the console field,
+    // the apps' "we do not serve your city yet" message, the audit trail.
     city: city || FALLBACK.city,
+    // `cities` is the parsed form, for matching.
+    cities: cities.length ? cities : cityList(FALLBACK.city),
     state: state || FALLBACK.state,
     lat,
     lng,
@@ -71,8 +95,15 @@ function sameCity(a, b) {
   const y = clean(b);
   if (!x || !y) return false;
   if (x === y) return true;
-  // "ahmedabaddistrict" contains "ahmedabad".
-  if (x.includes(y) || y.includes(x)) return true;
+  // "ahmedabaddistrict" and "ahmedabadcity" both START WITH "ahmedabad".
+  //
+  // Anchored at the front rather than matched anywhere, which is what this
+  // did before there was more than one city to match against. "nagar" is a
+  // substring of "gandhinagar" and is also the name of half the localities in
+  // Gujarat, so an unanchored check would have let a locality in Surat
+  // register as Gandhinagar. Every case the leniency was written for is a
+  // suffix on the city name, so the front is where the anchor belongs.
+  if (x.startsWith(y) || y.startsWith(x)) return true;
   // Ahmedabad / Ahmadabad differ by one vowel, and both are in daily use.
   return x.replace(/[aeiou]/g, '') === y.replace(/[aeiou]/g, '');
 }
@@ -88,7 +119,7 @@ export async function isInServiceArea({ lat, lng, city, state }) {
   const area = await getServiceArea();
   if (!area.enabled) return { inside: true, reason: 'gate_off', area };
 
-  if (sameCity(city, area.city)) return { inside: true, reason: 'city_name', area };
+  if (area.cities.some((c) => sameCity(city, c))) return { inside: true, reason: 'city_name', area };
 
   // Null Island is not a place anybody registered from.
   //

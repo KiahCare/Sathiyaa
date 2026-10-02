@@ -32,7 +32,10 @@ abstract class SathiyaaProviderBackend {
 
   /// Uploads one supporting document and returns the URL the server stored it
   /// at. `category` must be one the server knows: aadhar, police-verification,
-  /// work-certificate, medical-certificate, photo, selfie.
+  /// work-certificate, medical-certificate, org-registration, photo, selfie.
+  /// The list is `CATEGORIES` in the API's uploadController.js, and a category
+  /// missing from it is a 400 -- which is how organisation registration
+  /// certificates went unstored for as long as they did.
   Future<String> uploadDocument(String filePath, {String category});
 
 

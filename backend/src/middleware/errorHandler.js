@@ -7,7 +7,15 @@ export function notFoundHandler(req, res) {
 // eslint-disable-next-line no-unused-vars
 export function errorHandler(err, req, res, next) {
   if (err instanceof ApiError) {
-    return res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    return res.status(err.status).json({
+      error: {
+        code: err.code,
+        message: err.message,
+        // Only present on a validation refusal, so every existing client sees
+        // the same two-key shape it always did.
+        ...(err.fields ? { fields: err.fields } : {}),
+      },
+    });
   }
 
   // mysql2 duplicate key etc.

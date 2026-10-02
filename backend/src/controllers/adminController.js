@@ -9,7 +9,15 @@ import {
   parseTargeting, resolveRecipients, availableCities,
 } from '../services/broadcastTargeting.js';
 import { getServiceArea } from '../services/serviceArea.js';
+import {
+  CLINICAL_SERVICES, EMAIL_RE, GST_RE,
+  HOURLY_RATE_MAX, HOURLY_RATE_MIN, MAX_CARER_AGE_YEARS, MIN_CARER_AGE_YEARS, MOBILE_RE,
+  ageInYears, createProviderAccount, hashPin, isAfterTime,
+  normaliseAddresses, normaliseExpertise, normaliseWorkHours, pinRefusal,
+} from '../services/providerAccounts.js';
 import * as push from '../integrations/push.js';
+import { geocode, providerName as mapsProviderName } from '../integrations/maps.js';
+import { normaliseGender } from '../utils/enums.js';
 import { localToday } from '../utils/dates.js';
 
 const adminId = (req) => req.user.id;
@@ -249,6 +257,27 @@ const PROVIDER_COLUMNS = [
 ].map((c) => `p.${c}`).join(', ');
 
 /**
+ * The one way a provider row reaches the console.
+ *
+ * Every handler that sends a provider to the browser goes through this, so that
+ * the column list above is the only place that decides what the console may
+ * see. `createProvider` originally answered with the row its own INSERT had
+ * read back, which was a `SELECT *` — so the new provider's `pin_hash` was
+ * returned to the browser, a credential the console has no use for and which
+ * the list query had been explicitly rewritten to stop leaking. One SELECT
+ * means that cannot happen again in a third handler.
+ *
+ * The LEFT JOIN supplies the organisation's name for a carer who belongs to
+ * one: org employees are in this list and are approved from it, and an admin
+ * checking an agency's carer had no way to see which agency, so "Priya Shah,
+ * pending" arrived with no context at all and the approve button meant
+ * approving a stranger.
+ */
+const CONSOLE_PROVIDER_SELECT = `SELECT ${PROVIDER_COLUMNS}, org.name AS organization_name
+     FROM service_providers p
+     LEFT JOIN service_providers org ON org.provider_id = p.organization_id`;
+
+/**
  * Attaches each provider's expertise, addresses and work hours.
  *
  * The console's list and detail views both read these, and without them every
@@ -282,25 +311,402 @@ async function attachProviderDetail(rows) {
   }));
 }
 
+/**
+ * Free-text search across a directory listing, ranked.
+ *
+ * Both console lists have always had a search box and have always sent the
+ * term. Neither end read it, so typing a name reloaded the same unfiltered
+ * list in registration order -- reported as "searched for a carer, she did
+ * not come to the top", which she was never going to.
+ *
+ * Returns the WHERE fragment, the ORDER BY fragment, and the two parameter
+ * lists that go with them. They are separate because the caller has other
+ * filters to put between them, and SQL wants the WHERE parameters first.
+ *
+ * `alias` and `columns` are never user input -- both call sites pass literals.
+ * The search term is always a bound parameter.
+ *
+ * LIKE rather than full-text: these directories hold thousands of rows, not
+ * millions, and a name index would not help a pattern with a leading wildcard
+ * anyway. Revisit if either list ever gets large enough to feel it.
+ */
+function searchClause(search, alias, columns) {
+  // Capped before anything else. Nothing anybody is looking for is longer than
+  // this, the columns being matched are all shorter, and an uncapped term is a
+  // free way to make the server build and run a very large query.
+  const term = typeof search === 'string' ? search.trim().slice(0, 100) : '';
+  if (!term) return { where: null, orderBy: '', whereParams: [], orderParams: [] };
+
+  // Escape the wildcards, so a term containing % or _ searches for those
+  // characters rather than matching every row in the table.
+  const escaped = term.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const like = `%${escaped}%`;
+  const [nameCol, idCol, mobileCol] = columns;
+
+  // Ranked, because "contains" is not an answer when a term matches forty
+  // rows. Exact name first, then names beginning with the term, then an exact
+  // id or mobile, then a name containing it, then matches on anything else --
+  // so the person being looked for is at the top rather than in the middle.
+  const orderBy = `CASE
+                     WHEN ${alias}.${nameCol} = ? THEN 0
+                     WHEN ${alias}.${nameCol} LIKE ? THEN 1
+                     WHEN ${alias}.${idCol} = ? OR ${alias}.${mobileCol} = ? THEN 2
+                     WHEN ${alias}.${nameCol} LIKE ? THEN 3
+                     ELSE 4
+                   END, `;
+
+  return {
+    where: `(${columns.map((c) => `${alias}.${c} LIKE ?`).join(' OR ')})`,
+    orderBy,
+    whereParams: columns.map(() => like),
+    orderParams: [term, `${escaped}%`, term, term, like],
+  };
+}
+
 export const listProviders = asyncHandler(async (req, res) => {
-  const { status } = req.query;
-  // The organisation's name, for a carer who belongs to one.
-  //
-  // Org employees are in this list and are approved from it -- an admin
-  // checking an agency's carer had no way to see which agency, so "Priya
-  // Shah, pending" arrived with no context at all and the approve button
-  // meant approving a stranger.
-  let sql = `SELECT ${PROVIDER_COLUMNS}, org.name AS organization_name
-               FROM service_providers p
-               LEFT JOIN service_providers org ON org.provider_id = p.organization_id`;
+  const { status, search } = req.query;
+  let sql = CONSOLE_PROVIDER_SELECT;
   const params = [];
+  const where = [];
   // The console sends `all` for its "All" tab; treat that as no filter rather
   // than matching an approval_status literally named "all", which matched
   // nothing and made the tab look empty.
-  if (status && status !== 'all') { sql += ' WHERE p.approval_status = ?'; params.push(status); }
-  sql += ' ORDER BY p.created_at DESC';
+  if (status && status !== 'all') { where.push('p.approval_status = ?'); params.push(status); }
+
+  const find = searchClause(search, 'p', ['name', 'display_id', 'mobile_number', 'email']);
+  if (find.where) { where.push(find.where); params.push(...find.whereParams); }
+
+  if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+  sql += ` ORDER BY ${find.orderBy}p.created_at DESC`;
+  // After the WHERE parameters, because ORDER BY is the later clause.
+  params.push(...find.orderParams);
+
   const rows = await query(sql, params);
   res.json({ providers: await attachProviderDetail(rows) });
+});
+
+/**
+ * Create a freelance carer or an organisation from the console.
+ *
+ * Sathiyaa signs up most of its carers in person — somebody comes to the
+ * office with their papers, or an agency is brought on over a phone call — and
+ * until now the only way to get either into the system was to borrow their
+ * handset and drive the provider app's registration form on it. Accounts got
+ * created on an office phone, which the app then bound the account to, so the
+ * provider could not sign in from their own.
+ *
+ * WHY THIS IS STRICT WHEN /auth/provider/register IS NOT
+ *
+ * That endpoint has to keep accepting whatever an APK already on somebody's
+ * phone sends, so its validation is thin and the form on the phone does the
+ * real checking. The console is served fresh on every page load, there is only
+ * ever one version of it, and the person filling the form in is staff rather
+ * than the carer — so the checks belong on this side, where they cannot be
+ * skipped by sending the request directly. The rules below are the same ones
+ * the provider app's five-step form applies, in the same order.
+ *
+ * WHAT IS REQUIRED HERE THAT THE APP DOES NOT ASK FOR, AND WHY
+ *
+ *   - Coordinates for the work address. The matching query filters on
+ *     `HAVING distance_km <= ?`, and distance_km is NULL for a provider whose
+ *     address has no latitude. NULL <= 35 is not true, so an account created
+ *     without coordinates is invisible to every search a family makes and
+ *     looks perfectly healthy in this console. The app gets them from the
+ *     handset's GPS; the console gets them from the geocoder or the map, and
+ *     either way they are not optional.
+ *
+ *   - At least one service, and for a freelancer at least one working day.
+ *     Both are INNER JOINed by the same query, so a provider missing either is
+ *     unbookable for the same silent reason.
+ *
+ * Organisations are not given a gender or a date of birth — a company has
+ * neither — and are not asked for an Aadhaar card or a police check, because
+ * neither belongs to a company. What verifies an agency is its registration;
+ * what verifies the people it sends is each carer's own paperwork, collected
+ * when the agency adds that carer in the provider app. `org_employee` is
+ * therefore deliberately not creatable here.
+ */
+export const createProvider = asyncHandler(async (req, res) => {
+  const b = req.body ?? {};
+  const fields = {};
+  const fail = (field, message) => { if (!fields[field]) fields[field] = message; };
+
+  // ---- who this is ----------------------------------------------------
+  const providerKind = String(b.providerKind ?? '');
+  if (providerKind !== 'freelancer' && providerKind !== 'organization') {
+    throw Errors.validation(
+      { providerKind: 'Choose whether this is a freelance carer or an organisation.' },
+      "providerKind must be 'freelancer' or 'organization'. A carer who works for an "
+      + 'organisation is added by that organisation from the provider app, so their own '
+      + 'documents are collected and checked.'
+    );
+  }
+  const isOrg = providerKind === 'organization';
+
+  const name = String(b.name ?? '').trim();
+  if (name.length < 2) {
+    fail('name', isOrg ? 'Enter the organisation name.' : 'Enter their full name.');
+  }
+
+  const contactPerson = String(b.contactPerson ?? '').trim();
+  if (isOrg && contactPerson.length < 2) {
+    fail('contactPerson', 'Enter the name of the person Sathiyaa should speak to.');
+  }
+
+  const mobile = String(b.mobile ?? '').trim();
+  if (!MOBILE_RE.test(mobile)) {
+    fail('mobile', 'Enter a 10-digit Indian mobile number starting 6-9.');
+  }
+
+  const email = String(b.email ?? '').trim();
+  if (email && !EMAIL_RE.test(email)) {
+    fail('email', 'That does not look like an email address.');
+  }
+
+  // A company has no gender and no date of birth. A carer has both, and the
+  // matching query filters on gender with `sp.gender = ?` — a NULL there means
+  // this carer never appears in a search where the family asked for a woman or
+  // a man, which is most of them.
+  let gender = null;
+  let dob = null;
+  if (!isOrg) {
+    try {
+      gender = normaliseGender(b.gender, { required: true });
+    } catch {
+      fail('gender', 'Choose male, female or other.');
+    }
+    dob = b.dob ? String(b.dob) : null;
+    const years = ageInYears(dob);
+    if (dob && years === null) fail('dob', 'That date of birth is not a date.');
+    else if (years !== null && years < MIN_CARER_AGE_YEARS) {
+      fail('dob', `A carer must be at least ${MIN_CARER_AGE_YEARS} years old.`);
+    } else if (years !== null && years > MAX_CARER_AGE_YEARS) {
+      fail('dob', 'Please check the date of birth.');
+    }
+  }
+
+  // ---- where they work from -------------------------------------------
+  const line1 = String(b.address?.line1 ?? '').trim();
+  if (line1.length < 6) {
+    fail('address', isOrg ? 'Enter the registered office address.' : 'Enter their home address.');
+  }
+  const latitude = Number(b.address?.latitude);
+  const longitude = Number(b.address?.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    fail('location', 'Find the address on the map, or move the pin, so the location is set. '
+      + 'Without it this provider will not appear in any customer search.');
+  }
+
+  // ---- when, and what -------------------------------------------------
+  const workHours = normaliseWorkHours(b.workHours, { providerKind });
+  if (!isOrg && workHours.length === 0) {
+    fail('workHours', 'Pick at least one working day.');
+  }
+  // An end time before a start time is a silent problem: the booking search
+  // computes a day's capacity from these two, and a negative window makes a
+  // carer look permanently unavailable with nothing on screen to say why.
+  const badDay = workHours.find((w) => !isAfterTime(w.endTime, w.startTime));
+  if (badDay) {
+    fail('workHours', `On ${badDay.dayOfWeek.toUpperCase()} the finish time has to be after the start time.`);
+  }
+
+  const expertise = normaliseExpertise(b.expertise);
+  if (expertise.length === 0) {
+    fail('expertise', 'Pick at least one service they provide.');
+  }
+
+  // ---- what they charge -----------------------------------------------
+  const noFees = b.noFees === true;
+  let hourlyRate = 0;
+  if (!noFees) {
+    hourlyRate = Number(b.hourlyRate);
+    if (!Number.isFinite(hourlyRate)) {
+      fail('hourlyRate', 'Enter an hourly rate in rupees, or mark this as donated time.');
+    } else if (hourlyRate < HOURLY_RATE_MIN) {
+      fail('hourlyRate', `The hourly rate looks too low — the minimum is ₹${HOURLY_RATE_MIN}.`);
+    } else if (hourlyRate > HOURLY_RATE_MAX) {
+      fail('hourlyRate', `The hourly rate looks too high — the maximum is ₹${HOURLY_RATE_MAX}.`);
+    }
+  }
+
+  // ---- their papers ---------------------------------------------------
+  const doc = (v) => {
+    const s = String(v ?? '').trim();
+    return s.startsWith('/uploads/') ? s : null;
+  };
+  const aadharDocUrl = doc(b.aadharDocUrl);
+  const workCertificateUrl = doc(b.workCertificateUrl);
+  const policeVerificationUrl = doc(b.policeVerificationUrl);
+  const medicalCertificateUrl = doc(b.medicalCertificateUrl);
+  const orgRegistrationUrl = doc(b.orgRegistrationUrl);
+  const photoUrl = doc(b.photoUrl);
+
+  const gstNumber = String(b.gstNumber ?? '').trim().toUpperCase();
+  if (gstNumber && !GST_RE.test(gstNumber)) {
+    fail('gstNumber', 'That does not look like a GST number.');
+  }
+
+  const policeFrom = b.policeVerificationValidFrom || null;
+  const policeTo = b.policeVerificationValidTo || null;
+  const medicalFrom = b.medicalCertificateValidFrom || null;
+  const medicalTo = b.medicalCertificateValidTo || null;
+
+  if (!isOrg) {
+    // The promise the customer app makes to a family is that Sathiyaa checked
+    // this person. These two documents are what that check is made of, so the
+    // console cannot be the way to create a carer without them.
+    if (!aadharDocUrl && !workCertificateUrl) {
+      fail('aadharDocUrl', 'Attach an Aadhaar card or a work certificate.');
+    }
+    if (!policeVerificationUrl) {
+      fail('policeVerificationUrl', 'Attach the police verification certificate.');
+    } else if (!policeFrom || !policeTo) {
+      fail('policeVerificationDates', 'Enter the dates the police verification is valid between.');
+    } else if (!(new Date(policeTo) > new Date(policeFrom))) {
+      fail('policeVerificationDates', 'The "valid to" date must be after the "valid from" date.');
+    } else if (new Date(policeTo) < new Date(localToday())) {
+      fail('policeVerificationDates', 'That police verification has already expired.');
+    }
+
+    const clinical = expertise.some((e) => CLINICAL_SERVICES.includes(e.serviceType));
+    if (clinical && !medicalCertificateUrl) {
+      fail('medicalCertificateUrl', 'A medical certificate is required for nursing and physiotherapy.');
+    }
+    if (medicalCertificateUrl && (!medicalFrom || !medicalTo)) {
+      fail('medicalCertificateDates', 'Enter the dates the medical certificate is valid between.');
+    } else if (medicalFrom && medicalTo && !(new Date(medicalTo) > new Date(medicalFrom))) {
+      fail('medicalCertificateDates', 'The "valid to" date must be after the "valid from" date.');
+    }
+  }
+
+  // ---- how they will sign in ------------------------------------------
+  const refusal = pinRefusal(b.pin);
+  if (refusal) fail('pin', refusal);
+
+  // ---- what the office has decided about them -------------------------
+  const approvalStatus = ['pending', 'approved', 'hold'].includes(b.approvalStatus)
+    ? b.approvalStatus
+    : 'approved';
+
+  if (Object.keys(fields).length > 0) throw Errors.validation(fields);
+
+  // Checked last, so a form with a mistyped number and three other problems
+  // reports all four rather than only this one.
+  const [clash] = await query('SELECT display_id, name FROM service_providers WHERE mobile_number = ?', [mobile]);
+  if (clash) {
+    throw Errors.validation(
+      { mobile: `That number is already registered — ${clash.name} (${clash.display_id}).` },
+      'A provider with this mobile number already exists.'
+    );
+  }
+
+  const languages = Array.isArray(b.languages) && b.languages.length ? b.languages : ['English'];
+
+  const provider = await createProviderAccount({
+    providerKind,
+    name,
+    photoUrl,
+    gender,
+    dob,
+    mobile,
+    email: email || null,
+    pinHash: await hashPin(b.pin),
+    hourlyRate,
+    noFees,
+    aadharDocUrl,
+    workCertificateUrl,
+    policeVerificationUrl,
+    policeVerificationValidFrom: policeFrom,
+    policeVerificationValidTo: policeTo,
+    medicalCertificateUrl,
+    medicalCertificateValidFrom: medicalFrom,
+    medicalCertificateValidTo: medicalTo,
+    orgRegistrationUrl: isOrg ? orgRegistrationUrl : null,
+    gstNumber: isOrg ? (gstNumber || null) : null,
+    contactPerson: isOrg ? contactPerson : null,
+    allocateViaOrg: isOrg && b.allocateViaOrg === true,
+    languages,
+    approvalStatus,
+    approvalNotes: b.approvalNotes || 'Created in the admin console.',
+    // Only stamp an approver when there is an approval to stamp. Writing this
+    // admin's id against a row left pending would make the console's own
+    // "approved by" column name somebody who has not approved anything.
+    approvedBy: approvalStatus === 'approved' ? adminId(req) : null,
+    // The office takes the registration fee in cash or by transfer and ticks
+    // the box; nothing is charged through the gateway from here.
+    registrationFeePaid: b.registrationFeePaid === true,
+    // Explicitly unbound. This account is being created on an office computer
+    // and must not be tied to it — the provider's own handset claims it on
+    // their first sign-in, which is what the device check is for.
+    deviceId: null,
+    addresses: normaliseAddresses([{
+      addressType: 'home',
+      line1,
+      line2: b.address?.line2 || null,
+      city: b.address?.city || null,
+      state: b.address?.state || null,
+      pincode: b.address?.pincode || null,
+      latitude,
+      longitude,
+    }]),
+    workHours,
+    expertise,
+  });
+
+  // The PIN itself is never written to the audit log, and is not echoed in the
+  // response either — the console already has the value it submitted and shows
+  // it on the confirmation panel. What is worth recording is that a member of
+  // staff set it, so that if the account is later misused there is a note
+  // saying its first credential did not come from the provider.
+  await req.audit('AdminCreateProvider', 'CREATE', {
+    providerId: provider.provider_id,
+    displayId: provider.display_id,
+    providerKind,
+    mobile,
+    approvalStatus,
+    pinSetByAdmin: true,
+  });
+
+  // Re-read through the console's own SELECT rather than answering with the row
+  // the INSERT read back: that row is a `SELECT *` and carries `pin_hash`.
+  const [consoleRow] = await query(`${CONSOLE_PROVIDER_SELECT} WHERE p.provider_id = ?`, [provider.provider_id]);
+  const [row] = await attachProviderDetail([consoleRow]);
+  res.status(201).json({
+    provider: row,
+    // What still has to happen before this account can take a booking, so the
+    // console can say so instead of leaving somebody to find out later.
+    outstanding: [
+      approvalStatus !== 'approved' && 'Approval is still outstanding.',
+      !provider.registration_fee_paid && 'The registration fee has not been recorded as paid.',
+      isOrg && !orgRegistrationUrl && 'No registration certificate has been attached.',
+    ].filter(Boolean),
+  });
+});
+
+/**
+ * Turn an address somebody typed into coordinates.
+ *
+ * Only needed by the console, which has no GPS to ask. It proxies whichever
+ * maps provider the server is configured with rather than letting the browser
+ * call Nominatim directly, for three reasons: the provider's fair-use rate
+ * limit is enforced server-side in one place, the key for a paid provider never
+ * reaches the browser, and the console keeps working if the provider is
+ * switched from OSM to Google.
+ */
+export const geocodeAddress = asyncHandler(async (req, res) => {
+  const q = String(req.query.q ?? '').trim();
+  if (q.length < 3) throw Errors.badRequest('VALIDATION', 'Type at least three characters to search for.');
+  const result = await geocode(q.slice(0, 200));
+  res.json({
+    query: q,
+    formattedAddress: result.formattedAddress ?? q,
+    latitude: result.latitude ?? null,
+    longitude: result.longitude ?? null,
+    // No geocoder is configured when this is 'stub', in which case null
+    // coordinates mean "not looked up" rather than "not found" — two different
+    // things to tell the person at the keyboard, who can still drag the pin.
+    geocoder: mapsProviderName,
+  });
 });
 
 /**
@@ -366,7 +772,7 @@ export const unblockProvider = asyncHandler(async (req, res) => {
 });
 
 export const listCustomers = asyncHandler(async (req, res) => {
-  const { status } = req.query;
+  const { status, search } = req.query;
   // The console shows a city per customer, taken from the primary address.
   let sql = `SELECT c.customer_id, c.display_id, c.name, c.photo_url, c.dob, c.gender,
                     c.blood_group, c.email, c.mobile_number, c.registration_fee_paid,
@@ -376,8 +782,17 @@ export const listCustomers = asyncHandler(async (req, res) => {
                LEFT JOIN customer_addresses a
                  ON a.customer_id = c.customer_id AND a.address_type = 'primary'`;
   const params = [];
-  if (status && status !== 'all') { sql += ' WHERE c.status = ?'; params.push(status); }
-  sql += ' ORDER BY c.created_at DESC';
+  const where = [];
+  if (status && status !== 'all') { where.push('c.status = ?'); params.push(status); }
+
+  // Same box, same term, same fix as the provider list above.
+  const find = searchClause(search, 'c', ['name', 'display_id', 'mobile_number', 'email']);
+  if (find.where) { where.push(find.where); params.push(...find.whereParams); }
+
+  if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
+  sql += ` ORDER BY ${find.orderBy}c.created_at DESC`;
+  params.push(...find.orderParams);
+
   const rows = await query(sql, params);
   res.json({ customers: rows });
 });
@@ -559,7 +974,15 @@ export const putConfig = asyncHandler(async (req, res) => {
   const cleaned = {};
   for (const [key, raw] of Object.entries(updates)) {
     if (TEXT_KEYS.has(key)) {
-      const text = String(raw ?? '').trim();
+      // `service_area_city` holds a comma-separated list now that Sathiyaa
+      // serves Ahmedabad and Gandhinagar, so the stray commas and doubled
+      // spaces an administrator leaves behind while editing are tidied here
+      // rather than stored and matched against for ever.
+      const text = String(raw ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(', ');
       if (text.length < 2) {
         throw Errors.badRequest('VALIDATION', `${key} needs a place name — got ${JSON.stringify(raw)}`);
       }
@@ -981,10 +1404,29 @@ export const allocateReferral = asyncHandler(async (req, res) => {
   if (candidates.length === 0) throw Errors.conflict('NO_PROVIDER_AVAILABLE', 'No approved, available provider matches this referral');
 
   const chosen = candidates[0];
-  await query('UPDATE business_agent_referrals SET status = "booked" WHERE id = ?', [id]);
+  // Written down, not just returned.
+  //
+  // This used to set the status and hand the carer's name back in the response,
+  // where it was read once and lost. Reopening the partner showed 'booked' and
+  // nothing else -- so "who did you send?" had no answer anywhere in the
+  // console or the database. Asked for directly by the client.
+  await query(
+    `UPDATE business_agent_referrals
+        SET status = 'booked', allocated_provider_id = ?, allocated_at = NOW(), allocated_by = ?
+      WHERE id = ?`,
+    [chosen.provider_id, adminId(req), id]
+  );
   await req.audit('AdminAllocateReferral', 'UPDATE', { referralId: id, providerId: chosen.provider_id });
 
-  res.json({ referralId: Number(id), allocatedProviderId: chosen.provider_id, providerName: chosen.name });
+  res.json({
+    referralId: Number(id),
+    allocatedProviderId: chosen.provider_id,
+    providerName: chosen.name,
+    // How many others could have taken it. One candidate means this referral
+    // has no fallback if that carer drops out, which is worth knowing at the
+    // moment of allocating rather than on the morning of the visit.
+    alternatives: candidates.length - 1,
+  });
 });
 
 // ---------------------------------------------------------------------

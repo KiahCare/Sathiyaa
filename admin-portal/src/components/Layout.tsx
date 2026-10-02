@@ -98,7 +98,7 @@ export default function Layout() {
           ))}
         </nav>
         <div style={{ padding: '14px 20px', fontSize: 11, color: '#6f9a90', borderTop: '1px solid #1c453d' }}>
-          Sathiyaa Admin Portal v1.0
+          Sathiyaa Admin Portal v{__APP_VERSION__}
         </div>
       </aside>
 

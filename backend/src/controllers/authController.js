@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { query, withTransaction } from '../db/pool.js';
+import { query } from '../db/pool.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { Errors } from '../utils/apiError.js';
 import { signToken } from '../utils/jwt.js';
@@ -8,7 +8,14 @@ import { generateOtp, hashOtp, compareOtp, otpExpiryDate } from '../utils/otp.js
 import { displayId } from '../utils/ids.js';
 import { sendOtp } from '../integrations/sms.js';
 import { env } from '../config/env.js';
-import { normaliseGender } from '../utils/enums.js';
+import {
+  PROVIDER_KINDS,
+  createProviderAccount,
+  hashPin,
+  normaliseAddresses,
+  normaliseExpertise,
+  normaliseWorkHours,
+} from '../services/providerAccounts.js';
 
 const devOtpField = (otp) => (env.isProd ? {} : { devOtp: otp });
 
@@ -126,97 +133,62 @@ export const providerRegister = asyncHandler(async (req, res) => {
   if (!b.name || !b.mobile || !b.providerKind) {
     throw Errors.badRequest('VALIDATION', 'name, mobile and providerKind are required');
   }
-  if (!['freelancer', 'organization', 'org_employee'].includes(b.providerKind)) {
-    throw Errors.badRequest('VALIDATION', 'providerKind must be freelancer, organization or org_employee');
+  if (!PROVIDER_KINDS.includes(b.providerKind)) {
+    throw Errors.badRequest('VALIDATION', `providerKind must be one of: ${PROVIDER_KINDS.join(', ')}`);
   }
   const [existing] = await query('SELECT provider_id FROM service_providers WHERE mobile_number = ?', [b.mobile]);
   if (existing) throw Errors.conflict('ALREADY_REGISTERED', 'A provider with this mobile number already exists');
 
-  const pinHash = b.pin ? await bcrypt.hash(String(b.pin), 10) : null;
-
-  const provider = await withTransaction(async (conn) => {
-    const [result] = await conn.query(
-      `INSERT INTO service_providers
-        (display_id, provider_kind, organization_id, name, photo_url, gender, dob, mobile_number, email,
-         pin_hash, hourly_rate, aadhar_doc_url, police_verification_url, work_certificate_url,
-         org_registration_url, gst_number, contact_person,
-         distance_from_home_pref_km, distance_from_office_pref_km, languages, device_id)
-       VALUES ('PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        b.providerKind,
-        b.organizationId || null,
-        b.name,
-        b.photoUrl || null,
-        normaliseGender(b.gender),
-        b.dob || null,
-        b.mobile,
-        b.email || null,
-        pinHash,
-        b.hourlyRate || 0,
-        b.aadharDocUrl || null,
-        b.policeVerificationUrl || null,
-        b.workCertificateUrl || null,
-        // Organisations only. A freelancer sends none of these, and an
-        // organisation sends no gender or date of birth -- which is why
-        // normaliseGender has to tolerate an empty string rather than
-        // defaulting a company to 'female'.
-        b.orgRegistrationUrl || null,
-        b.gstNumber || null,
-        b.contactPerson || null,
-        b.distanceFromHomePrefKm || null,
-        b.distanceFromOfficePrefKm || null,
-        b.languages ? JSON.stringify(b.languages) : null,
-        // Bind the account to the handset it was created on. Without this the
-        // account stayed unbound until its first PIN login, and any device
-        // with the right PIN could claim it in the meantime.
-        b.deviceId || null,
-      ]
-    );
-    const providerId = result.insertId;
-    await conn.query('UPDATE service_providers SET display_id = ? WHERE provider_id = ?', [displayId('SP', providerId), providerId]);
-
-    if (Array.isArray(b.addresses)) {
-      for (const a of b.addresses) {
-        await conn.query(
-          `INSERT INTO service_provider_addresses (provider_id, address_type, line1, line2, city, state, pincode, latitude, longitude)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [providerId, a.addressType || 'home', a.line1, a.line2 || null, a.city || null, a.state || null, a.pincode || null, a.latitude || null, a.longitude || null]
-        );
-      }
-    }
-    // An organisation that names no days still has to be findable.
-    //
-    // The matching query INNER JOINs service_provider_work_hours, so a
-    // provider with no rows matches nothing, ever -- an agency that skipped
-    // the (now optional) "days the organisation operates" question would
-    // register successfully, appear in the console as approved, and never be
-    // offered a single booking, with nothing on any screen to say why.
-    //
-    // An agency covers whatever hours the carer it sends covers, so the
-    // honest default is all seven days. Each carer's own days are collected
-    // when they are added, and those are what a family is really matched
-    // against.
-    const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-    let workHours = Array.isArray(b.workHours) ? b.workHours : [];
-    if (workHours.length === 0 && b.providerKind === 'organization') {
-      workHours = DAYS.map((d) => ({ dayOfWeek: d, startTime: '00:00', endTime: '23:59' }));
-    }
-    for (const w of workHours) {
-      await conn.query(
-        `INSERT INTO service_provider_work_hours (provider_id, day_of_week, start_time, end_time) VALUES (?, ?, ?, ?)`,
-        [providerId, w.dayOfWeek, w.startTime, w.endTime]
-      );
-    }
-    if (Array.isArray(b.expertise)) {
-      for (const e of b.expertise) {
-        await conn.query(
-          `INSERT INTO service_provider_expertise (provider_id, service_type, years_experience, notes) VALUES (?, ?, ?, ?)`,
-          [providerId, e.serviceType, e.yearsExperience || null, e.notes || null]
-        );
-      }
-    }
-    const [row] = await conn.query('SELECT * FROM service_providers WHERE provider_id = ?', [providerId]);
-    return row[0];
+  // Deliberately permissive, and it has to stay that way.
+  //
+  // Everything beyond the three required fields above is checked by the form on
+  // the phone, not here. That is not an oversight to be tidied up: an APK
+  // already installed on somebody's handset cannot be made to send a field it
+  // was never built to send, so tightening this endpoint retires working
+  // installs. The console's own create endpoint is strict, because the console
+  // is served fresh on every page load and there is only ever one version of
+  // it.
+  const provider = await createProviderAccount({
+    providerKind: b.providerKind,
+    organizationId: b.organizationId || null,
+    name: b.name,
+    photoUrl: b.photoUrl || null,
+    gender: b.gender,
+    dob: b.dob || null,
+    mobile: b.mobile,
+    email: b.email || null,
+    pinHash: b.pin ? await hashPin(b.pin) : null,
+    hourlyRate: b.hourlyRate || 0,
+    // These seven used to be dropped on the floor here and written back a
+    // moment later by the app's follow-up PUT to /providers/me, because this
+    // INSERT predated the columns and was never extended. Anything that
+    // registers without making that second call - an older build, a test, a
+    // script - stored a provider with no document dates and no No-Fees flag.
+    noFees: b.noFees ?? false,
+    aadharDocUrl: b.aadharDocUrl || null,
+    policeVerificationUrl: b.policeVerificationUrl || null,
+    policeVerificationValidFrom: b.policeVerificationValidFrom || null,
+    policeVerificationValidTo: b.policeVerificationValidTo || null,
+    medicalCertificateUrl: b.medicalCertificateUrl || null,
+    medicalCertificateValidFrom: b.medicalCertificateValidFrom || null,
+    medicalCertificateValidTo: b.medicalCertificateValidTo || null,
+    workCertificateUrl: b.workCertificateUrl || null,
+    // Organisations only. A freelancer sends none of these, and an organisation
+    // sends no gender or date of birth.
+    orgRegistrationUrl: b.orgRegistrationUrl || null,
+    gstNumber: b.gstNumber || null,
+    contactPerson: b.contactPerson || null,
+    allocateViaOrg: b.allocateViaOrg ?? false,
+    distanceFromHomePrefKm: b.distanceFromHomePrefKm || null,
+    distanceFromOfficePrefKm: b.distanceFromOfficePrefKm || null,
+    languages: b.languages,
+    // Bind the account to the handset it was created on. Without this the
+    // account stayed unbound until its first PIN login, and any device with the
+    // right PIN could claim it in the meantime.
+    deviceId: b.deviceId || null,
+    addresses: normaliseAddresses(b.addresses),
+    workHours: normaliseWorkHours(b.workHours, { providerKind: b.providerKind }),
+    expertise: normaliseExpertise(b.expertise),
   });
 
   const token = signToken({ role: 'provider', id: provider.provider_id, name: provider.name });

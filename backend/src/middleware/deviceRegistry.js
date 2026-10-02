@@ -127,11 +127,3 @@ export async function recordDevice(req, user) {
   }
 }
 
-/**
- * Middleware. Runs after authentication, so it knows who the request is from.
- * Fires and forgets — the write is not on the critical path of the response.
- */
-export function trackDevice(req, res, next) {
-  if (req.user) void recordDevice(req, req.user);
-  next();
-}

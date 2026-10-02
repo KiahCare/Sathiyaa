@@ -87,6 +87,14 @@ export async function sendToToken({ token, title, body, data }) {
  * throwing — enabling push must not break flows that merely try to notify.
  */
 export async function sendToUser({ userType, userId, title, body, data }) {
+  // `sendToToken` above is finished and works; it is this function that cannot
+  // be, because there is nowhere to look a token up. Adding a `device_tokens`
+  // table — (user_type, user_id, token, platform, updated_at), written when an
+  // app reports its FCM token — turns this into one SELECT followed by a call
+  // to `sendToToken`, and push becomes real with no other change anywhere.
+  //
+  // So `sendToToken` looks unreferenced and is not dead: it is the half of
+  // this that is already done.
   console.log(
     `[fcm.sendToUser] no device_tokens table yet — would notify ${userType}#${userId}: ${title} / ${body}`
   );

@@ -62,12 +62,20 @@ every page already calls through `services.ts`.
 
 **Admin**
 - Login (`/login`)
-- Service Providers — approval queue + directory combined: filter by
-  approval status, search, view full profile (photo, Aadhar / police
-  verification / work certificate as view/download links, work days &
-  hours, hourly rate, distance preferences), Approve / Put on Hold (with
-  required note) / Block (with required note) / Unblock, all with
-  confirmation dialogs (`/admin/providers`)
+- Service Providers — approval queue, directory and sign-up in one
+  (`/admin/providers`): filter by approval status, search, view full
+  profile (photo, Aadhaar / police verification / work certificate as
+  view/download links, work days & hours, hourly rate, distance
+  preferences), Approve / Put on Hold (with required note) / Block (with
+  required note) / Unblock / Release device, all with confirmation dialogs.
+
+  **Add provider** opens a five-step form — named and ordered exactly like
+  the provider app's own registration, so staff reading answers off a paper
+  form are asked for the same things in the same order. It uploads the
+  documents, finds the address on a map, sets a sign-in PIN shown once, and
+  the provider can then sign in on their own handset immediately. See
+  `AddProviderDialog.tsx`; the server does the validating and answers with a
+  per-field error map.
 - Customers — searchable/sortable directory with block/unblock
   (`/admin/customers`)
 - Business Partners — list, register new partner (entity, partner name, 2
@@ -135,9 +143,13 @@ src/
   components/   Layout.tsx (sidebar/header), ui.tsx (badges, modals, states),
                 ProtectedRoute.tsx (role-gated routing)
   context/      AuthContext.tsx
-  pages/admin/  ServiceProviders, Customers, BusinessAgents, Configuration,
-                Reports, Broadcast, Tracking, AuditLog
+  pages/admin/  ServiceProviders (+ AddProviderDialog), Customers,
+                BusinessAgents, Configuration, Reports, Broadcast, Tracking,
+                Devices, AuditLog
   pages/partner/ MyReferrals, MyRevenue
-  types/        TypeScript types mirroring ../docs/schema.sql
+  types/        TypeScript types mirroring the API's shapes. Read endpoints
+                hand back database rows (snake_case); write endpoints take
+                camelCase, the same shape the apps send. Each type names its
+                fields the way that endpoint actually names them.
   utils/        placeholder.ts (locally-generated avatar/doc/banner SVGs)
 ```

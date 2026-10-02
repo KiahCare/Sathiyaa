@@ -3,7 +3,8 @@ import type { BusinessAgent, BusinessAgentReferral } from '../../types';
 import { SERVICE_TYPE_LABELS } from '../../types';
 import {
   listBusinessAgents, registerBusinessAgent, setBusinessAgentBlocked,
-  listReferralsForAgent, getAgentRevenue, type AgentRevenueSummary, type NewBusinessAgentPayload,
+  listReferralsForAgent, getAgentRevenue, allocateReferral,
+  type AgentRevenueSummary, type NewBusinessAgentPayload,
 } from '../../api/services';
 import {
   PageHeader, StatusBadge, TableSkeleton, EmptyState, ErrorState, ConfirmDialog, Modal, InlineBanner,
@@ -49,6 +50,18 @@ export default function BusinessAgents() {
         actions={<button className="btn btn-primary" onClick={() => setShowRegister(true)}>+ Register Business Partner</button>}
       />
       {toast && <InlineBanner kind="success">{toast}</InlineBanner>}
+
+      {/* Asked directly: "where is the Business Partner login?" It was never
+          missing -- it is this same console at the same address, and a partner
+          signing in lands on their own two pages instead of the admin menu.
+          Nothing said so anywhere, so it was invisible. */}
+      <div className="card" style={{ marginBottom: 16, padding: '12px 16px', fontSize: 12.5, lineHeight: 1.6, color: 'var(--color-text-muted)' }}>
+        <strong style={{ color: 'var(--color-text)' }}>How a partner signs in.</strong>{' '}
+        Same address as this console, same login box — their mobile number and the password set
+        when you registered them. They land on their own two pages, <em>My Referrals</em> and{' '}
+        <em>My Revenue</em>, and see only their own data. Open one below to see the same thing
+        they see, plus the allocation.
+      </div>
 
       <div className="card" style={{ overflow: 'hidden' }}>
         {agents === null && !error && <TableSkeleton rows={5} cols={6} />}
@@ -219,6 +232,9 @@ function AgentDetailModal({ agent, onClose }: { agent: BusinessAgent; onClose: (
   const [revenue, setRevenue] = useState<AgentRevenueSummary | null>(null);
   const [tab, setTab] = useState<'referrals' | 'revenue'>('referrals');
   const [error, setError] = useState<string | null>(null);
+  /** The referral currently being allocated, so only its own button spins. */
+  const [allocating, setAllocating] = useState<number | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Both calls used to be bare .then(). A rejected promise left the state at
   // null forever, and null is exactly what draws the loading skeleton -- so a
@@ -245,6 +261,34 @@ function AgentDetailModal({ agent, onClose }: { agent: BusinessAgent; onClose: (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agent.business_partner_id]);
 
+  /**
+   * Asks the server to pick a carer for this referral.
+   *
+   * The failure worth handling by name is "nobody matches" -- it is a 409, not
+   * a fault, and it means the referral wants a carer who is approved, free on
+   * those dates and of the requested gender, and there is not one. Telling an
+   * administrator "something went wrong" for that would send them looking for
+   * a bug instead of for a carer.
+   */
+  async function handleAllocate(referralId: number) {
+    setAllocating(referralId);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await allocateReferral(referralId);
+      setNotice(
+        result.alternatives > 0
+          ? `Allocated to ${result.providerName}. ${result.alternatives} other carer${result.alternatives === 1 ? '' : 's'} also matched.`
+          : `Allocated to ${result.providerName} — the only carer who matched, so there is no fallback if they drop out.`
+      );
+      await load();
+    } catch (err: any) {
+      setError(err?.message ?? 'Could not allocate this referral.');
+    } finally {
+      setAllocating(null);
+    }
+  }
+
   return (
     <Modal onClose={onClose} width={720}>
       <div style={{ padding: 26 }}>
@@ -261,6 +305,7 @@ function AgentDetailModal({ agent, onClose }: { agent: BusinessAgent; onClose: (
           <button className={`tab-btn ${tab === 'revenue' ? 'active' : ''}`} onClick={() => setTab('revenue')}>Revenue Earned</button>
         </div>
 
+        {notice && <InlineBanner kind="success">{notice}</InlineBanner>}
         {error && <ErrorState message={error} onRetry={load} />}
 
         {tab === 'referrals' && !error && (
@@ -270,7 +315,10 @@ function AgentDetailModal({ agent, onClose }: { agent: BusinessAgent; onClose: (
             {referrals && referrals.length > 0 && (
               <table className="data-table">
                 <thead>
-                  <tr><th>Customer</th><th>Service</th><th>Duration</th><th>Status</th><th>Hours used</th></tr>
+                  <tr>
+                    <th>Customer</th><th>Service</th><th>Duration</th><th>Status</th>
+                    <th>Allocated carer</th><th>Hours used</th><th></th>
+                  </tr>
                 </thead>
                 <tbody>
                   {referrals.map((r) => (
@@ -279,7 +327,34 @@ function AgentDetailModal({ agent, onClose }: { agent: BusinessAgent; onClose: (
                       <td>{SERVICE_TYPE_LABELS[r.service_type]}</td>
                       <td>{r.duration_start} → {r.duration_end}</td>
                       <td><span className={`badge ${r.status === 'completed' ? 'badge-green' : r.status === 'cancelled' ? 'badge-red' : r.status === 'booked' ? 'badge-blue' : 'badge-gray'}`}>{r.status}</span></td>
+                      {/* The question a partner rings up to ask. Until now the
+                          console could not answer it: allocation set the status
+                          and threw the carer away. */}
+                      <td>
+                        {r.allocated_provider_name ? (
+                          <>
+                            <div style={{ fontWeight: 600 }}>{r.allocated_provider_name}</div>
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                              {r.allocated_provider_display_id}
+                              {r.allocated_at ? ` · ${new Date(r.allocated_at).toLocaleDateString('en-IN')}` : ''}
+                            </div>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Not allocated</span>
+                        )}
+                      </td>
                       <td>{r.hours_used ?? 0} hrs</td>
+                      <td>
+                        {!r.allocated_provider_id && r.status !== 'cancelled' && (
+                          <button
+                            className="btn btn-primary btn-sm"
+                            disabled={allocating === r.id}
+                            onClick={() => void handleAllocate(r.id)}
+                          >
+                            {allocating === r.id ? 'Finding…' : 'Allocate'}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

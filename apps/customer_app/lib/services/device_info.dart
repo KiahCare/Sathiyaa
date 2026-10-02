@@ -36,6 +36,14 @@ class DeviceInfo {
     return [model, os].where((s) => s != null && s.isNotEmpty).join(' · ');
   }
 
+  /// This build's version and build number, as `1.2.0+14`.
+  ///
+  /// Read from the package metadata rather than written out anywhere in the
+  /// Dart, so `pubspec.yaml` stays the only place a release number is changed
+  /// and a build cannot report a version it is not. Empty until [load] has run,
+  /// and on a host that has no package metadata at all.
+  static String get appVersion => _headers['X-App-Version'] ?? '';
+
   static Future<void> load() async {
     final out = <String, String>{};
 

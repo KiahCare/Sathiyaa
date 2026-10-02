@@ -70,10 +70,18 @@ export const createReferral = asyncHandler(async (req, res) => {
  * id in the *token* regardless, so the parameter was never read.
  */
 export async function referralsForAgent(partnerId) {
+  // The allocated carer is joined in by name. The console showed a referral as
+  // 'booked' with nothing saying who was sent, because the id was the only
+  // thing stored and nothing resolved it -- and a partner ringing up to ask
+  // which carer their client is getting is the most ordinary question there is.
   const rows = await query(
-    `SELECT r.*, a.referral_code
+    `SELECT r.*, a.referral_code,
+            p.name AS allocated_provider_name,
+            p.display_id AS allocated_provider_display_id,
+            p.mobile_number AS allocated_provider_mobile
      FROM business_agent_referrals r
      JOIN business_agents a ON a.business_partner_id = r.business_partner_id
+     LEFT JOIN service_providers p ON p.provider_id = r.allocated_provider_id
      WHERE r.business_partner_id = ?
      ORDER BY r.created_at DESC`,
     [partnerId]

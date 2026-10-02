@@ -17,6 +17,24 @@ export const DAY_LABELS: Record<DayOfWeek, string> = {
   sun: 'Sun', mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat',
 };
 
+/**
+ * The languages a provider can be recorded as speaking.
+ *
+ * This list has to stay identical to `kLanguages` in both Flutter apps
+ * (`lib/languages.dart`). They are stored as display names, not codes, because
+ * that is what the matching query compares against —
+ * `JSON_CONTAINS(languages, JSON_QUOTE('Gujarati'))` — so a console that
+ * offered "Gujrati" would write a value no family's filter can ever match, and
+ * nothing would report an error.
+ *
+ * Order is deliberate: English and Hindi first because they are what most
+ * carers offer, then the rest alphabetically.
+ */
+export const LANGUAGES = [
+  'English', 'Hindi', 'Bengali', 'Gujarati', 'Kannada', 'Malayalam',
+  'Marathi', 'Odia', 'Punjabi', 'Tamil', 'Telugu', 'Urdu',
+] as const;
+
 // ---------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------
@@ -84,8 +102,17 @@ export interface ServiceProvider {
   mobile_number: string;
   email: string | null;
   hourly_rate: number;
+  /** Donated time: the hourly rate is ignored and the hours go to the Time Bank. */
+  no_fees?: boolean;
   aadhar_doc_url: string | null;
   police_verification_url: string | null;
+  police_verification_valid_from?: string | null;
+  police_verification_valid_to?: string | null;
+  medical_certificate_url?: string | null;
+  medical_certificate_valid_from?: string | null;
+  medical_certificate_valid_to?: string | null;
+  /** Organisations only: bookings route to the agency instead of its carers. */
+  allocate_via_org?: boolean;
   /** JSON column: an array, or the string MySQL handed back unparsed. */
   languages?: string[] | string | null;
   /** Organisations only; null for a freelancer. */
@@ -113,6 +140,84 @@ export interface ServiceProvider {
   addresses: ProviderAddress[];
   work_hours: ProviderWorkHour[];
   expertise: ProviderExpertise[];
+}
+
+/**
+ * What POST /admin/providers takes, to sign somebody up from the office.
+ *
+ * camelCase, unlike `ServiceProvider` above: the read endpoints hand back
+ * database rows as they are, and the write endpoints take the same JSON shape
+ * the apps send. That inconsistency is the API's, not this file's, and naming
+ * the fields the way each endpoint actually names them is the only way a
+ * reviewer can check one against the other.
+ *
+ * `providerKind` is only the two kinds the console may create. A carer who works
+ * for an organisation is added by that organisation in the provider app, so
+ * their own Aadhaar and police check are collected from them rather than
+ * inherited from the agency.
+ */
+export interface NewProviderPayload {
+  providerKind: 'freelancer' | 'organization';
+  name: string;
+  /** Freelancers only; the matching query filters on it, so it is not optional there. */
+  gender?: Gender | '';
+  dob?: string | null;
+  mobile: string;
+  email?: string;
+  /** Six digits. Sent once, stored only as a bcrypt hash, never read back. */
+  pin: string;
+  hourlyRate?: number | '';
+  /** Donated time. The rate is then ignored and the hours go to the Time Bank. */
+  noFees?: boolean;
+  languages: string[];
+  photoUrl?: string | null;
+  aadharDocUrl?: string | null;
+  workCertificateUrl?: string | null;
+  policeVerificationUrl?: string | null;
+  policeVerificationValidFrom?: string | null;
+  policeVerificationValidTo?: string | null;
+  medicalCertificateUrl?: string | null;
+  medicalCertificateValidFrom?: string | null;
+  medicalCertificateValidTo?: string | null;
+  /** Organisations only. */
+  orgRegistrationUrl?: string | null;
+  gstNumber?: string;
+  contactPerson?: string;
+  allocateViaOrg?: boolean;
+  /**
+   * Coordinates are required, not decorative: the matching query filters on
+   * `HAVING distance_km <= ?`, and that is NULL for an address without them, so
+   * a provider stored without coordinates appears in no customer search at all
+   * while looking perfectly healthy in this console.
+   */
+  address: {
+    line1: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    latitude: number | null;
+    longitude: number | null;
+  };
+  workHours: { dayOfWeek: DayOfWeek; startTime: string; endTime: string }[];
+  expertise: ServiceType[];
+  approvalStatus: ApprovalStatus;
+  registrationFeePaid?: boolean;
+}
+
+/** What the server says still has to happen before the new account can work. */
+export interface NewProviderResult {
+  provider: ServiceProvider;
+  outstanding: string[];
+}
+
+/** One address lookup, for the form's "find on map" button. */
+export interface GeocodeResult {
+  formattedAddress: string;
+  latitude: number | null;
+  longitude: number | null;
+  /** 'stub' when no geocoder is configured, so null means "not looked up". */
+  geocoder: string;
 }
 
 // ---------------------------------------------------------------------
@@ -178,6 +283,12 @@ export interface BusinessAgentReferral {
   referral_code: string;
   hours_used?: number;
   revenue_earned?: number;
+  /** The carer allocated to this referral. Null until an admin allocates it. */
+  allocated_provider_id?: number | null;
+  allocated_provider_name?: string | null;
+  allocated_provider_display_id?: string | null;
+  allocated_provider_mobile?: string | null;
+  allocated_at?: string | null;
 }
 
 export interface BusinessAgentRevenueSummary {
@@ -410,17 +521,3 @@ export interface ProviderTrackingEntry {
   on_active_booking: boolean;
 }
 
-// ---------------------------------------------------------------------
-// Generic API envelope
-// ---------------------------------------------------------------------
-
-export interface ApiError {
-  error: { code: string; message: string };
-}
-
-export interface Paginated<T> {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-}

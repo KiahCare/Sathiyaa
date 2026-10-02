@@ -143,6 +143,8 @@ is billed nothing for that session). See `services/pricing.js#creditTimeBank`.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/admin/providers?status=pending` | approval queue |
+| POST | `/admin/providers` | sign a provider up from the office — see **Creating a provider from the console** below |
+| GET | `/admin/geocode?q=` | coordinates for a typed address, via whichever `MAPS_PROVIDER` is configured. Returns `{formattedAddress, latitude, longitude, geocoder}`; `geocoder: 'stub'` means none is configured, so null coordinates mean "not looked up" rather than "not found". |
 | POST | `/admin/providers/:id/approve` \| `/hold` \| `/reject` | |
 | POST | `/admin/providers/:id/block` \| `/unblock` | blocked provider cannot log in |
 | GET | `/admin/customers?status=` | directory for the Admin Customers screen |
@@ -158,6 +160,34 @@ is billed nothing for that session). See `services/pricing.js#creditTimeBank`.
 | GET | `/admin/reports/growth` | new customers & providers per day/week/month/quarter/year |
 | GET | `/admin/audit-log` | filterable audit trail |
 
+### Creating a provider from the console
+
+`POST /admin/providers` creates a `freelancer` or an `organization` with everything the app's own
+five-step registration collects. `org_employee` is deliberately refused: a carer who works for an
+agency is added by that agency from the provider app, so their own Aadhaar and police verification
+are collected from them rather than inherited from the agency's approval.
+
+Body is the same camelCase shape `/auth/provider/register` takes, plus `approvalStatus`
+(`approved` | `pending` | `hold`, default `approved`) and `registrationFeePaid`.
+
+Three things this endpoint requires that `/auth/provider/register` does not, because an account
+missing any of them is silently unbookable rather than visibly broken:
+
+- `address.latitude` / `address.longitude`. Provider matching filters with
+  `HAVING distance_km <= ?`, and `distance_km` is NULL without them, so the provider is returned
+  by no search while looking healthy in the console.
+- at least one `expertise` entry, and for a freelancer at least one `workHours` day. Both are
+  INNER JOINed by the same query. An organisation that sends none gets all seven days, because an
+  agency covers whatever hours the carer it sends covers.
+- a `pin` that passes the same three rules the app's PIN step applies: six digits, not the same
+  digit six times, not `123456` or `654321`.
+
+The PIN is hashed with bcrypt, is never returned, and is never written to the audit log — the
+console shows the value it submitted, once. `device_id` is left null so the provider's own handset
+claims the account on first sign-in; the audit entry records `pinSetByAdmin: true`.
+
+Validation refusals are `422 VALIDATION` with the field map described under **Errors**.
+
 ## Uploads
 
 Every "upload" in the requirements doc — customer photo, prescription, provider photo, Aadhar,
@@ -171,7 +201,7 @@ caller then writes that URL into whichever `*_url` column it belongs in.
 | GET | `/uploads/<category>/<file>` | The stored file, served statically (not under `/api/v1`). Sent with `X-Content-Type-Options: nosniff`. |
 
 - **Categories**: `photo`, `prescription`, `aadhar`, `police-verification`, `work-certificate`,
-  `medical-certificate`, `broadcast`, `selfie`. An unknown one is a 400.
+  `medical-certificate`, `org-registration`, `broadcast`, `selfie`. An unknown one is a 400.
 - **Accepted types**: JPEG, PNG, WebP, HEIC, PDF. Anything else is a 422 `UNSUPPORTED_TYPE`.
 - **Size limit**: 8 MB, over which the response is a 422 `LIMIT_FILE_SIZE`.
 - Stored filenames are random, so nothing about the name reveals whose file it is.
@@ -181,3 +211,16 @@ caller then writes that URL into whichever `*_url` column it belongs in.
 
 ## Errors
 Standard envelope: `{ "error": { "code": "BOOKING_EXPIRED", "message": "..." } }`, HTTP status matches semantics (400/401/403/404/409/422/500).
+
+A form submitted with several problems at once answers `422` with a `fields` map alongside the
+message, keyed by the field name the submitting form uses:
+
+```json
+{ "error": { "code": "VALIDATION", "message": "Some of these answers need correcting.",
+             "fields": { "mobile": "Enter a 10-digit Indian mobile number starting 6-9.",
+                         "pin": "Choose a PIN that is not the same digit six times." } } }
+```
+
+`fields` is present only on validation refusals, so every existing client still sees the same
+two-key shape it always did. It exists because a single sentence makes somebody re-read a dozen
+boxes to work out which one it means, and says nothing at all about the second problem.

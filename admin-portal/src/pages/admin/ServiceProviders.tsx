@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ApprovalStatus, ServiceProvider } from '../../types';
+import type { ApprovalStatus, NewProviderResult, ServiceProvider } from '../../types';
 import { SERVICE_TYPE_LABELS, DAY_LABELS } from '../../types';
 import { uploadUrl } from '../../api/client';
 import {
@@ -10,6 +10,7 @@ import {
   PageHeader, ApprovalBadge, StatusBadge, TableSkeleton, EmptyState, ErrorState,
   ConfirmDialog, Modal, InlineBanner,
 } from '../../components/ui';
+import AddProviderDialog, { ProviderCreatedPanel } from './AddProviderDialog';
 
 const STATUS_TABS: { value: ApprovalStatus | 'all'; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -37,6 +38,10 @@ export default function ServiceProviders() {
   const [selected, setSelected] = useState<ServiceProvider | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  // Held only while the confirmation panel is open: the PIN the form submitted,
+  // which the server does not send back and nothing persists.
+  const [created, setCreated] = useState<{ result: NewProviderResult; pin: string } | null>(null);
 
   async function load() {
     setError(null);
@@ -125,9 +130,29 @@ export default function ServiceProviders() {
       <PageHeader
         title="Service Providers"
         subtitle="Review new registrations, approve for customer search, or hold/block providers."
+        actions={(
+          <button className="btn btn-primary" onClick={() => setAdding(true)}>
+            + Add provider
+          </button>
+        )}
       />
 
       {toast && <InlineBanner kind="success">{toast}</InlineBanner>}
+
+      {/* The two columns were read as one thing with two contradictory values
+          -- "Approval: Rejected, Account: Active, so which is it?" They answer
+          different questions, and the only reliable fix is to say so on the
+          page rather than expect anybody to infer it from two badges. The
+          "Bookable" column below is the answer people actually wanted. */}
+      <div className="card" style={{ marginBottom: 16, padding: '12px 16px', fontSize: 12.5, lineHeight: 1.6, color: 'var(--color-text-muted)' }}>
+        <strong style={{ color: 'var(--color-text)' }}>Approval</strong> is about their paperwork —
+        whether we have checked this person and are willing to put them in front of a family.{' '}
+        <strong style={{ color: 'var(--color-text)' }}>Account</strong> is about their login —
+        whether they can sign in at all. They are independent on purpose: a carer rejected for a
+        missing police check still has a working account, so they can re-upload the document and
+        be approved without registering again. <strong style={{ color: 'var(--color-text)' }}>Bookable</strong>{' '}
+        is the one that matters day to day, and it needs both.
+      </div>
 
       <div className="card" style={{ marginBottom: 16, padding: '14px 16px', display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <div className="tabs" style={{ borderBottom: 'none', flexWrap: 'wrap' }}>
@@ -167,7 +192,8 @@ export default function ServiceProviders() {
                   <th>Expertise</th>
                   <th>Rate/hr</th>
                   <th>Approval</th>
-                  <th>Status</th>
+                  <th>Account</th>
+                  <th>Bookable</th>
                   <th>Registered</th>
                   <th></th>
                 </tr>
@@ -187,8 +213,23 @@ export default function ServiceProviders() {
                     <td>{p.display_id}</td>
                     <td>{p.expertise.map((e) => SERVICE_TYPE_LABELS[e.service_type]).join(', ') || '—'}</td>
                     <td>₹{p.hourly_rate}</td>
-                    <td><ApprovalBadge status={p.approval_status} /></td>
+                    <td>
+                      <ApprovalBadge status={p.approval_status} />
+                      {/* The reason is captured when a provider is put on hold
+                          or rejected, and until now it was only visible after
+                          opening the profile -- so a list of rejections gave no
+                          hint why any of them happened. */}
+                      {p.approval_notes && (
+                        <div
+                          title={p.approval_notes}
+                          style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        >
+                          {p.approval_notes}
+                        </div>
+                      )}
+                    </td>
                     <td><StatusBadge status={p.status} /></td>
+                    <td><BookableCell provider={p} /></td>
                     <td>{new Date(p.created_at).toLocaleDateString('en-IN')}</td>
                     <td>
                       <button className="btn btn-secondary btn-sm" onClick={() => setSelected(p)}>
@@ -290,7 +331,67 @@ export default function ServiceProviders() {
           onCancel={() => setDialog(null)}
         />
       )}
+
+      {adding && (
+        <AddProviderDialog
+          onClose={() => setAdding(false)}
+          onCreated={(result, pin) => {
+            setAdding(false);
+            setCreated({ result, pin });
+            load();
+          }}
+        />
+      )}
+
+      {created && (
+        <ProviderCreatedPanel
+          result={created.result}
+          pin={created.pin}
+          onClose={() => {
+            setToast(`${created.result.provider.name} has been added as ${created.result.provider.display_id}.`);
+            setCreated(null);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Whether a family can actually find and book this person, and if not, why.
+ *
+ * Approval and account status are separate values that combine into one fact,
+ * and reading that fact off two badges is exactly what nobody could do: a row
+ * showing "Rejected" next to "Active" looks like a contradiction rather than
+ * two true statements about different things. This states the conclusion.
+ *
+ * Blocked wins over approval, because a blocked account cannot sign in to
+ * accept the booking however good its paperwork is.
+ */
+function bookable(p: ServiceProvider): { yes: boolean; label: string; why: string } {
+  if (p.status === 'blocked') {
+    return { yes: false, label: 'No', why: 'Blocked — cannot sign in, so cannot take a booking.' };
+  }
+  switch (p.approval_status) {
+    case 'approved':
+      return { yes: true, label: 'Yes', why: 'Approved and able to sign in. Appears in customer search.' };
+    case 'pending':
+      return { yes: false, label: 'No', why: 'Waiting for review. Hidden from customer search until approved.' };
+    case 'hold':
+      return { yes: false, label: 'No', why: 'On hold. Hidden from search until the issue is resolved and they are approved.' };
+    case 'rejected':
+      return { yes: false, label: 'No', why: 'Rejected. Can still sign in and fix their documents, but is hidden from search.' };
+    default:
+      return { yes: false, label: 'No', why: 'Not approved.' };
+  }
+}
+
+function BookableCell({ provider }: { provider: ServiceProvider }) {
+  const b = bookable(provider);
+  return (
+    <span className={`badge ${b.yes ? 'badge-green' : 'badge-gray'}`} title={b.why}>
+      {b.label}
+    </span>
   );
 }
 
@@ -359,9 +460,20 @@ function ProviderProfileModal({
                 </span>
               </div>
             )}
+            {/* The conclusion, in words, above the two badges that produce it.
+                Asked for directly: an admin looking at "Rejected" and "Active"
+                together could not tell what was true of the carer. */}
+            <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--color-text-muted)' }}>
+              {bookable(provider).yes ? '✓ ' : '· '}{bookable(provider).why}
+            </div>
             {provider.approval_notes && (
               <div style={{ marginTop: 8, fontSize: 12.5, background: 'var(--color-warning-light)', color: 'var(--color-warning)', padding: '7px 10px', borderRadius: 7 }}>
-                Note: {provider.approval_notes}
+                <strong>Reason given:</strong> {provider.approval_notes}
+                {provider.approved_at && (
+                  <div style={{ marginTop: 3, opacity: 0.8 }}>
+                    Recorded {new Date(provider.approved_at).toLocaleString('en-IN')}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -481,7 +593,19 @@ function ProviderProfileModal({
           {provider.approval_status !== 'rejected' && (
             <button className="btn btn-danger" onClick={onReject}>Reject</button>
           )}
-          <button className="btn btn-secondary" onClick={onDelete}>Remove</button>
+          {/* Was labelled "Remove", which told nobody what it removed or how
+              it differed from Block -- the question came back as "what is the
+              Remove button for?". It deletes the registration outright, and is
+              for junk sign-ups and leftover test accounts only. The server
+              refuses once there is any history, so the real answer for a
+              misbehaving carer is Block, next to it. */}
+          <button
+            className="btn btn-secondary"
+            onClick={onDelete}
+            title="Deletes this registration permanently. Only for junk sign-ups and test accounts — an account with booking history cannot be deleted, and should be blocked instead."
+          >
+            Delete registration
+          </button>
           {provider.approval_status !== 'approved' && (
             <button className="btn btn-primary" onClick={onApprove}>Approve</button>
           )}

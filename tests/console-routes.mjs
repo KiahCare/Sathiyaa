@@ -126,7 +126,15 @@ for (const p of paths) {
   // 404 from both roles means the route is not mounted at all. 403/401 from
   // both means it exists but nobody the console signs in as can use it --
   // which is what the "View partner" panel did for months.
-  const reachable = [asAdmin, asPartner].some((s) => s < 400);
+  //
+  // A 400 or a 422 counts as reached, and the distinction matters. This probe
+  // sends no query string, so an endpoint with a required parameter --
+  // /admin/geocode?q= is the first of them -- answers "you did not say what to
+  // look up". That means the role got past authentication AND the handler ran,
+  // which is the opposite of what this test is looking for. Treating it as
+  // unreachable reported a working endpoint as broken.
+  const DENIED = new Set([401, 403, 404]);
+  const reachable = [asAdmin, asPartner].some((s) => !DENIED.has(s));
   const missing = asAdmin === 404 && asPartner === 404;
 
   let verdict;

@@ -12,6 +12,7 @@ import type {
   ReportsDashboard, RevenueByCity, RevenueByServiceType, RevenueByProvider,
   GrowthReport, GrowthPeriod, AuthUser, LoginResponse, ServiceType,
   UserDevice, DeviceUserType, ServiceAreaConfig, SignupPlacesReport,
+  NewProviderPayload, NewProviderResult, GeocodeResult,
 } from '../types';
 
 // ---------------------------------------------------------------------
@@ -152,16 +153,6 @@ export async function listProviders(filters: ProviderFilters = {}): Promise<Serv
   return data.providers ?? data;
 }
 
-export async function getProvider(id: number): Promise<ServiceProvider> {
-  if (USE_MOCK) {
-    await mockDelay(150);
-    const p = store.providers.find((x) => x.provider_id === id);
-    if (!p) throw new ApiRequestError('NOT_FOUND', 'Provider not found.', 404);
-    return p;
-  }
-  const { data } = await apiClient.get(`/providers/${id}`);
-  return data;
-}
 
 async function setProviderApproval(id: number, status: ApprovalStatus, note?: string) {
   if (USE_MOCK) {
@@ -253,7 +244,16 @@ export const deleteProvider = async (id: number) => {
   return data;
 };
 
-/** The same, for a customer with no bookings. */
+/**
+ * The same, for a customer with no bookings.
+ *
+ * No screen calls this yet, deliberately. The Customers page offers block and
+ * unblock only, because blocking keeps the history and the server refuses to
+ * delete an account that has ever taken a booking anyway — so for all but a
+ * brand-new account, delete and block mean the same thing and block says so
+ * honestly. Kept because the endpoint exists and is the right call for clearing
+ * out a test sign-up.
+ */
 export const deleteCustomer = async (id: number) => {
   if (USE_MOCK) {
     await mockDelay(350);
@@ -291,6 +291,135 @@ export const resetProviderDevice = async (id: number) => {
   const { data } = await apiClient.post(`/admin/providers/${id}/reset-device`, {});
   return data;
 };
+
+/**
+ * Sign a carer or an organisation up from the office.
+ *
+ * Most of Sathiyaa's providers are taken on in person, and before this the only
+ * way in was to borrow their handset and drive the app's registration form on
+ * it. Done on an office phone instead, the account bound itself to the office
+ * phone and the provider could never sign in from their own.
+ *
+ * The server does the validating, not this function. It answers 422 with
+ * `error.fields` keyed by the form's own field names, so the form shows each
+ * problem next to the box it belongs to and every problem at once. Re-checking
+ * the same rules here would mean two sets of rules to keep in step, and the
+ * browser's would be the one that could be skipped.
+ */
+export async function createProvider(payload: NewProviderPayload): Promise<NewProviderResult> {
+  if (USE_MOCK) {
+    await mockDelay(700);
+    if (store.providers.some((p) => p.mobile_number === payload.mobile)) {
+      throw new ApiRequestError('VALIDATION', 'A provider with this mobile number already exists.', 422);
+    }
+    const id = Math.max(0, ...store.providers.map((p) => p.provider_id)) + 1;
+    const provider: ServiceProvider = {
+      provider_id: id,
+      display_id: `SP-${String(id).padStart(6, '0')}`,
+      provider_kind: payload.providerKind,
+      organization_id: null,
+      name: payload.name,
+      photo_url: payload.photoUrl ?? null,
+      gender: (payload.gender || null) as ServiceProvider['gender'],
+      dob: payload.dob ?? null,
+      mobile_number: payload.mobile,
+      email: payload.email ?? null,
+      hourly_rate: payload.noFees ? 0 : Number(payload.hourlyRate) || 0,
+      no_fees: !!payload.noFees,
+      languages: payload.languages,
+      aadhar_doc_url: payload.aadharDocUrl ?? null,
+      work_certificate_url: payload.workCertificateUrl ?? null,
+      police_verification_url: payload.policeVerificationUrl ?? null,
+      police_verification_valid_from: payload.policeVerificationValidFrom ?? null,
+      police_verification_valid_to: payload.policeVerificationValidTo ?? null,
+      medical_certificate_url: payload.medicalCertificateUrl ?? null,
+      medical_certificate_valid_from: payload.medicalCertificateValidFrom ?? null,
+      medical_certificate_valid_to: payload.medicalCertificateValidTo ?? null,
+      org_registration_url: payload.orgRegistrationUrl ?? null,
+      gst_number: payload.gstNumber ?? null,
+      contact_person: payload.contactPerson ?? null,
+      allocate_via_org: !!payload.allocateViaOrg,
+      approval_status: payload.approvalStatus,
+      approval_notes: 'Created in the admin console.',
+      approved_by: payload.approvalStatus === 'approved' ? 1 : null,
+      approved_at: payload.approvalStatus === 'approved' ? new Date().toISOString() : null,
+      status: 'active',
+      registration_fee_paid: !!payload.registrationFeePaid,
+      device_id: null,
+      location_on: false,
+      current_latitude: null,
+      current_longitude: null,
+      current_location_at: null,
+      distance_from_home_pref_km: null,
+      distance_from_office_pref_km: null,
+      rating_avg: 0,
+      rating_count: 0,
+      created_at: new Date().toISOString(),
+      addresses: [{ address_type: 'home', ...payload.address }],
+      work_hours: payload.workHours.map((w) => ({
+        day_of_week: w.dayOfWeek, start_time: w.startTime, end_time: w.endTime,
+      })),
+      expertise: payload.expertise.map((service_type) => ({ service_type, years_experience: null })),
+    };
+    store.providers.unshift(provider);
+    pushAudit({
+      user_type: 'admin', user_id: 1, user_name: 'Admin User', device_id: 'DEV-WEBADMIN',
+      location_id: null, form_name: 'AdminCreateProvider', action: 'create',
+    });
+    return { provider, outstanding: [] };
+  }
+  const { data } = await apiClient.post('/admin/providers', payload);
+  return data;
+}
+
+/**
+ * Turn a typed address into coordinates.
+ *
+ * Proxied through the API rather than called from the browser so the maps
+ * provider's fair-use limit is enforced in one place and a paid provider's key
+ * never reaches the bundle.
+ */
+export async function geocodeAddress(q: string): Promise<GeocodeResult> {
+  if (USE_MOCK) {
+    await mockDelay(500);
+    // Somewhere in the launch city, so the form behaves the same way in a demo
+    // as it does against a real server.
+    return {
+      formattedAddress: `${q} (mock)`,
+      latitude: 23.0225 + (Math.random() - 0.5) / 40,
+      longitude: 72.5714 + (Math.random() - 0.5) / 40,
+      geocoder: 'mock',
+    };
+  }
+  const { data } = await apiClient.get('/admin/geocode', { params: { q } });
+  return data;
+}
+
+/**
+ * Upload one document and return the path to store against the provider.
+ *
+ * The path comes back relative (`/uploads/aadhar/...`) on purpose — it is
+ * resolved against the API's origin by `uploadUrl()` when it is displayed,
+ * because the console is served from a different origin than the API and an
+ * absolute URL built from the API's own `Host` header is wrong behind a CDN.
+ */
+export async function uploadProviderDocument(
+  file: File,
+  category: 'photo' | 'aadhar' | 'police-verification' | 'work-certificate'
+    | 'medical-certificate' | 'org-registration',
+): Promise<string> {
+  if (USE_MOCK) {
+    await mockDelay(600);
+    // A real object URL, so the form's preview of the chosen file works in a
+    // demo even though nothing has been stored anywhere.
+    return URL.createObjectURL(file);
+  }
+  const form = new FormData();
+  form.append('file', file);
+  form.append('category', category);
+  const { data } = await apiClient.post('/uploads', form);
+  return data.url as string;
+}
 
 // ---------------------------------------------------------------------
 // Customers (admin directory)
@@ -452,6 +581,49 @@ export interface AgentRevenueSummary {
 /** Admin console, viewing somebody else's partner account. */
 export function getAgentRevenue(businessPartnerId: number): Promise<AgentRevenueSummary> {
   return fetchRevenue(`/admin/business-agents/${businessPartnerId}/revenue`, businessPartnerId);
+}
+
+export interface ReferralAllocation {
+  referralId: number;
+  allocatedProviderId: number;
+  providerName: string;
+  /** How many other carers also matched. Zero means no fallback. */
+  alternatives: number;
+}
+
+/**
+ * Allocates a carer to a referral.
+ *
+ * The endpoint has existed since the referral feature was built and nothing
+ * in the console ever called it, so a referral submitted by a partner could
+ * never be moved off 'pending' by anybody. The server picks the best match on
+ * service type, availability and gender preference; this is the button that
+ * asks it to.
+ */
+export async function allocateReferral(referralId: number): Promise<ReferralAllocation> {
+  if (USE_MOCK) {
+    await mockDelay(500);
+    const referral = store.referrals.find((r) => r.id === referralId);
+    if (!referral) throw new ApiRequestError('NOT_FOUND', 'Referral not found.', 404);
+    const match = store.providers.find(
+      (p) => p.approval_status === 'approved' && p.status === 'active'
+        && p.expertise.some((e) => e.service_type === referral.service_type)
+    );
+    if (!match) {
+      throw new ApiRequestError(
+        'NO_PROVIDER_AVAILABLE', 'No approved, available provider matches this referral.', 409
+      );
+    }
+    referral.status = 'booked';
+    referral.allocated_provider_id = match.provider_id;
+    referral.allocated_provider_name = match.name;
+    referral.allocated_at = new Date().toISOString();
+    return {
+      referralId, allocatedProviderId: match.provider_id, providerName: match.name, alternatives: 0,
+    };
+  }
+  const { data } = await apiClient.post(`/admin/business-agents/referrals/${referralId}/allocate`);
+  return data;
 }
 
 /** Partner portal, the signed-in partner's own revenue. */

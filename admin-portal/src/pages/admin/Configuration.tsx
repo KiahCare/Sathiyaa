@@ -81,8 +81,9 @@ export default function Configuration() {
 
   async function handleSaveArea() {
     if (!area) return;
-    if (area.city.trim().length < 2) {
-      setError('Enter the name of the city Sathiyaa operates in.');
+    const cities = area.city.split(',').map((c) => c.trim()).filter(Boolean);
+    if (cities.length === 0 || cities.some((c) => c.length < 2)) {
+      setError('Enter the cities Sathiyaa operates in, separated by commas.');
       return;
     }
     if (!Number.isFinite(area.lat) || area.lat < -90 || area.lat > 90 ||
@@ -100,7 +101,7 @@ export default function Configuration() {
       setArea(await updateServiceAreaConfig(area));
       setToast(
         area.enabled
-          ? `Saved. New sign-ups outside ${area.city} will be put on the waiting list.`
+          ? `Saved. Sathiyaa now serves ${cities.join(' and ')}. New sign-ups anywhere else go on the waiting list.`
           : 'Saved. Anybody can now register, from anywhere.'
       );
     } catch (err: any) {
@@ -297,7 +298,7 @@ export default function Configuration() {
           Both apps ask the phone where it is once, straight after registration, and anybody
           outside this area is kept on a waiting list instead of being let in to a search that
           would find nobody. They keep their account, and they are counted in Reports → where
-          people are signing up from. Changing the city here takes effect immediately, with no
+          people are signing up from. Changing the cities here takes effect immediately, with no
           new app release.
         </p>
 
@@ -320,13 +321,26 @@ export default function Configuration() {
             </label>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 20, opacity: area.enabled ? 1 : 0.5 }}>
-              <div>
-                <label className="field-label">City</label>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label className="field-label">Cities</label>
                 <input
                   className="input" value={area.city} disabled={!area.enabled}
+                  placeholder="Ahmedabad, Gandhinagar"
                   onChange={(e) => setArea({ ...area, city: e.target.value })}
                 />
-                <div className="field-hint">Matched loosely against what the geocoder returns.</div>
+                <div className="field-hint">
+                  Separate several with commas. Matched loosely against what the geocoder
+                  returns, so "Ahmedabad District" and "Ahmadabad" both count. Adding a city
+                  here opens it immediately — there is no new app release.
+                </div>
+                {/* Split as you type, so it is obvious how the text is being
+                    read before you save it -- a missing comma shows up here as
+                    one chip reading "Ahmedabad Gandhinagar". */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {area.city.split(',').map((c) => c.trim()).filter(Boolean).map((c) => (
+                    <span key={c} className="badge badge-blue">{c}</span>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="field-label">State</label>
