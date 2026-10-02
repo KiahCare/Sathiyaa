@@ -246,11 +246,18 @@ New, and written to be read by somebody who has never seen this project:
   API and the console go out together in an afternoon — so holding both on one
   history means releasing either one drags the other along.
 
-  `scripts/sync-to-github.mjs` can already write `sathiyaa-apps` and
-  `sathiyaa-platform`, and both are staged locally with their own READMEs and
-  changelogs. They are **parked** until the repositories exist on GitHub; until
-  then this repository is the one that is kept current, and `--only=monorepo`
-  is what the sync does by default. See `CONTRIBUTING.md`.
+  `scripts/sync-to-github.mjs` now writes three targets from one allowlist, and
+  plans every one of them before writing to any, so a secret found in the third
+  stops the first from being written. A bare invocation writes **this**
+  repository and nothing else; `-All` adds the two staged ones, which are
+  already set up locally with their own READMEs and changelogs and are
+  **parked** until the repositories exist on GitHub. See `CONTRIBUTING.md`.
+
+  Rules can now publish a file under a different name. The one use of it is the
+  apps architecture doc, which is `docs/ARCHITECTURE.md` in its own repository
+  and `docs/ARCHITECTURE-APPS.md` here, where the platform's already holds that
+  name — so both layouts read one copy of each document and cannot drift while
+  both exist.
 
 ## 1.0.0 — 2026-09-29
 
